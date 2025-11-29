@@ -76,14 +76,36 @@ slotify/
 
 ## Web UI
 
-Upload a CSV calendar file and see each participant's availability visualized:
+### How It Works
+
+**Step 1: Load Availabilities**
+
+Upload a CSV calendar file to load participant schedules. The timeline immediately visualizes each person's busy/free time:
 
 ```
         07  08  09  10  11  12  13  14  15  16  17  18  19
 Alice   ░░░░████████░░░░░░░░░░░░████░░░░░░░░████░░░░░░░░
 Jack    ░░░░████████████░░░░░░░░████░░░░░░░░████░░░░░░░░
 
-Legend: ░ Free  █ Busy  ▓ Available slot
+░ Free (light green)  █ Busy (red)
 ```
+
+**Step 2: Query Meeting Slots**
+
+Select participants, choose meeting duration (30/60/90/120 min), and optionally add buffer time. Click "Find Available Slots" to query.
+
+**Step 3: Visualize Results**
+
+Available meeting slots are highlighted in green on the timeline:
+
+```
+        07  08  09  10  11  12  13  14  15  16  17  18  19
+Alice   ▓▓▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓
+Jack    ▓▓▓▓████████████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓
+
+▓ Available slot (green) - times where ALL selected participants are free
+```
+
+The slots are also listed as clickable chips: `07:00` `12:00` `15:00` `17:00`
 
 See [DESIGN.md](DESIGN.md) for architecture details.
