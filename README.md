@@ -72,6 +72,18 @@ slotify/
 - Optional participants support
 - Buffer time between meetings
 - Blackout periods
-- Web UI for CSV upload
+- Web UI with timeline visualization
+
+## Web UI
+
+Upload a CSV calendar file and see each participant's availability visualized:
+
+```
+        07  08  09  10  11  12  13  14  15  16  17  18  19
+Alice   ░░░░████████░░░░░░░░░░░░████░░░░░░░░████░░░░░░░░
+Jack    ░░░░████████████░░░░░░░░████░░░░░░░░████░░░░░░░░
+
+Legend: ░ Free  █ Busy  ▓ Available slot
+```
 
 See [DESIGN.md](DESIGN.md) for architecture details.
