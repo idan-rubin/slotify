@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: slotify-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  slotify-web:
+    build: .
+    container_name: slotify-web
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
