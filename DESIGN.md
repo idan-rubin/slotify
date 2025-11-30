@@ -48,6 +48,7 @@ A calendar scheduling system that finds available meeting slots for multiple par
 5. Redis for web app storage (in-memory for CLI)
 6. No useless comments (self-documenting code)
 7. Pre-processing moved to input ingestion to simplify the scheduling API
+8. Modular web frontend: separate CSS (`style.css`) and JS (`app.js`) files
 
 ### Where AI Assisted
 
@@ -470,6 +471,51 @@ Legend: ░ Free (light green)  █ Busy (red)  ▓ Available slot (green)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/upload` | POST | Upload CSV, returns participants + busy slots |
+| `/api/upload` | POST | Upload CSV with SSE progress events |
 | `/api/availability` | POST | Find available slots for selected participants |
 | `/api/meeting-request` | POST | Find slots with required + optional participants |
+
+### API Validation
+
+The web API includes comprehensive input validation to prevent abuse and ensure data integrity:
+
+| Validation | Limit | Description |
+|------------|-------|-------------|
+| File size | 5 MB | Maximum upload file size |
+| File type | `.csv` | Only CSV files allowed |
+| Lines per file | 10,000 | Maximum lines in CSV |
+| Line length | 2,000 chars | Maximum characters per line |
+| Participant name | 100 chars | Maximum name length |
+| Subject length | 500 chars | Maximum event subject length |
+| Duration | 1-480 min | Meeting duration range |
+| Buffer | 0-60 min | Buffer between meetings |
+| Blackouts | 10 max | Maximum blocked time periods |
+| Participants | 100 max | Maximum participants per request |
+
+Additional validations:
+- No duplicate participants in request
+- Participant cannot be both required and optional
+- Invalid characters blocked in names (`:*[]{}\"'`)
+- Blackout end time must be after start time
+
+### Server-Sent Events (SSE)
+
+File upload uses SSE for real-time progress updates:
+
+```
+POST /api/upload
+Content-Type: multipart/form-data
+
+Response (text/event-stream):
+event: progress
+data: {"message":"Parsing CSV file..."}
+
+event: progress
+data: {"message":"Found 3 participants"}
+
+event: progress
+data: {"message":"Saving schedules..."}
+
+event: done
+data: {"participants":["Alice","Bob"],"busySlots":{...}}
+```

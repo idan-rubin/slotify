@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: slotify-web
-        image: tovliregistry.azurecr.io/slotify-web:latest
+        image: slotifyacr.azurecr.io/slotify-web:latest
         ports:
         - containerPort: 8080
         env:

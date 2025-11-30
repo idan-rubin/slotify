@@ -39,6 +39,7 @@ public class WebApp {
     private static final int MAX_BUFFER_MINUTES = 60;
     private static final int MAX_BLACKOUTS = 10;
     private static final String INVALID_CHARS = ":*[]{}\\\"'";
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON_MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
     private final ScheduleRepository repository;
     private final CsvCalendarParser parser = new CsvCalendarParser();
@@ -79,13 +80,13 @@ public class WebApp {
                         ctx.status(400).json(Map.of("error", e.getMessage())))
                 .exception(Exception.class, (e, ctx) ->
                         ctx.status(500).json(Map.of("error", "Internal server error")))
-                .post("/api/upload", app::upload)
+                .post("/api/upload", app::uploadWithSSE)
                 .post("/api/availability", app::availability)
                 .post("/api/meeting-request", app::meetingRequest)
                 .start(8080);
     }
 
-    private void upload(Context ctx) {
+    private void uploadWithSSE(Context ctx) {
         UploadedFile file = ctx.uploadedFile("file");
         if (file == null) {
             ctx.status(400).json(Map.of("error", "No file uploaded"));
@@ -103,15 +104,32 @@ public class WebApp {
             return;
         }
 
-        Path temp = null;
+        Path temp;
         try {
             temp = Files.createTempFile("calendar", ".csv");
             try (InputStream in = file.content();
                  OutputStream out = Files.newOutputStream(temp)) {
                 in.transferTo(out);
             }
+        } catch (IOException e) {
+            ctx.status(500).json(Map.of("error", "Failed to save file"));
+            return;
+        }
+
+        ctx.contentType("text/event-stream");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("Connection", "keep-alive");
+        ctx.header("X-Accel-Buffering", "no");
+
+        try {
+            sendSSE(ctx, "progress", "{\"message\":\"Parsing CSV file...\"}");
 
             var schedules = parser.parseAndBuildSchedules(temp);
+
+            sendSSE(ctx, "progress", "{\"message\":\"Found " + schedules.size() + " participants\"}");
+
+            sendSSE(ctx, "progress", "{\"message\":\"Saving schedules...\"}");
+
             dataLock.writeLock().lock();
             try {
                 repository.clear();
@@ -120,7 +138,9 @@ public class WebApp {
                 dataLock.writeLock().unlock();
             }
 
-            var busySlots = schedules.entrySet().stream()
+            sendSSE(ctx, "progress", "{\"message\":\"Building response...\"}");
+
+            var busySlotsMap = schedules.entrySet().stream()
                     .collect(Collectors.toMap(
                             Map.Entry::getKey,
                             entry -> entry.getValue().busySlots().stream()
@@ -128,12 +148,32 @@ public class WebApp {
                                     .toList()
                     ));
             var participants = schedules.keySet().stream().sorted().toList();
-            ctx.json(new UploadResponse(participants, busySlots));
-        } catch (IOException e) {
-            ctx.status(500).json(Map.of("error", "Failed to process file"));
+
+            var result = new UploadResponse(participants, busySlotsMap);
+            sendSSE(ctx, "done", JSON_MAPPER.writeValueAsString(result));
+
+        } catch (Exception e) {
+            try {
+                sendSSE(ctx, "error", "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            } catch (IOException ignored) {}
         } finally {
             deleteTempFile(temp);
         }
+    }
+
+    private void sendSSE(Context ctx, String event, String data) throws IOException {
+        ctx.res().getWriter().write("event: " + event + "\n");
+        ctx.res().getWriter().write("data: " + data + "\n\n");
+        ctx.res().getWriter().flush();
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     private void availability(Context ctx) {
