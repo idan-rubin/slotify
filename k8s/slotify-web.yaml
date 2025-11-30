@@ -18,6 +18,13 @@ spec:
         image: tovliregistry.azurecr.io/slotify-web:latest
         ports:
         - containerPort: 8080
+        env:
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: BUFFER_MINUTES
+          value: "0"
         resources:
           requests:
             memory: "256Mi"
@@ -25,6 +32,18 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service

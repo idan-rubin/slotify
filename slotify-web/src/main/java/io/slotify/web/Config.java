@@ -26,18 +26,24 @@ class Config {
     }
 
     String redisHost() {
-        var value = properties.getProperty("redis.host", "");
+        var value = getConfig("REDIS_HOST", "redis.host", "");
         return value.isBlank() ? null : value;
     }
 
     int redisPort() {
-        var value = properties.getProperty("redis.port", "6379");
-        return Integer.parseInt(value);
+        return Integer.parseInt(getConfig("REDIS_PORT", "redis.port", "6379"));
     }
 
     Duration bufferBetweenMeetings() {
-        var value = properties.getProperty("buffer.minutes", "0");
-        var minutes = Integer.parseInt(value);
+        var minutes = Integer.parseInt(getConfig("BUFFER_MINUTES", "buffer.minutes", "0"));
         return minutes > 0 ? Duration.ofMinutes(minutes) : null;
+    }
+
+    private String getConfig(String envVar, String property, String defaultValue) {
+        var envValue = System.getenv(envVar);
+        if (envValue != null && !envValue.isBlank()) {
+            return envValue;
+        }
+        return properties.getProperty(property, defaultValue);
     }
 }
