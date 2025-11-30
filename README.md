@@ -103,7 +103,7 @@ Open http://localhost:8080
 
 ```bash
 # Build for linux/amd64
-docker buildx build --platform linux/amd64 -t <your-registry>/slotify-web:latest --push .
+docker buildx build --platform linux/amd64 --target web -t <your-registry>/slotify-web:latest --push .
 ```
 
 ### Deploy

@@ -65,3 +65,6 @@ input[type="time"] { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6
 .blackout-chip { display: inline-flex; align-items: center; gap: 6px; background: #fef3c7; color: #92400e; padding: 6px 12px; border-radius: 20px; font-size: 13px; }
 .blackout-chip button { background: none; border: none; color: #92400e; cursor: pointer; padding: 0; font-size: 16px; line-height: 1; }
 .blackout-chip button:hover { color: #dc2626; }
+.checkbox-label { display: inline-flex; align-items: center; gap: 4px; font-weight: normal; font-size: 13px; cursor: pointer; }
+.checkbox-label input { margin: 0; }
+.inline:has(#no-buffer:checked) #buffer { opacity: 0.4; pointer-events: none; }

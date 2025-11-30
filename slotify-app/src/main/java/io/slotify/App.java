@@ -1,6 +1,7 @@
 package io.slotify;
 
 import io.slotify.core.model.AvailableSlot;
+import io.slotify.core.model.Constants;
 import io.slotify.core.model.TimeSlot;
 import io.slotify.core.parser.CsvCalendarParser;
 import io.slotify.core.repository.InMemoryScheduleRepository;
@@ -39,6 +40,7 @@ public class App implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        System.out.println(Constants.LOGO);
         var parser = new CsvCalendarParser();
         var repository = new InMemoryScheduleRepository();
 

@@ -271,7 +271,7 @@ async function findSlots() {
                 required,
                 optional,
                 durationMinutes: +document.getElementById('duration').value,
-                bufferMinutes: +document.getElementById('buffer').value,
+                bufferMinutes: document.getElementById('no-buffer').checked ? 0 : +document.getElementById('buffer').value,
                 blackouts
             })
         });

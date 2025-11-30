@@ -14,7 +14,9 @@ services:
       retries: 5
 
   slotify-web:
-    build: .
+    build:
+      context: .
+      target: web
     container_name: slotify-web
     ports:
       - "8080:8080"
