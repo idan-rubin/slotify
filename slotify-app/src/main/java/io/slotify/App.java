@@ -51,9 +51,9 @@ public class App implements Callable<Integer> {
             var schedules = parser.parseAndBuildSchedules(calendarPath);
             schedules.values().forEach(repository::save);
 
-            List<TimeSlot> blackouts = blackoutPath != null
+            var blackouts = blackoutPath != null
                     ? parser.parseBlackouts(blackoutPath)
-                    : List.of();
+                    : List.<TimeSlot>of();
 
             var buffer = bufferMinutes == 0 ? null : Duration.ofMinutes(bufferMinutes);
             var service = new DefaultSchedulingService(repository, blackouts, buffer);

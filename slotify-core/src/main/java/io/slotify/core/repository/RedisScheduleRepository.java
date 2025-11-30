@@ -58,7 +58,7 @@ public class RedisScheduleRepository implements ScheduleRepository {
     @Override
     public Set<String> getAllParticipantNames() {
         try (var jedis = jedisPool.getResource()) {
-            Set<String> names = new HashSet<>();
+            var names = new HashSet<String>();
             scanKeys(jedis, keys -> {
                 for (String key : keys) {
                     names.add(key.substring(KEY_PREFIX.length()));
