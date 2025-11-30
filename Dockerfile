@@ -1,7 +1,6 @@
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 COPY pom.xml .
-COPY slotify-contract ./slotify-contract
 COPY slotify-core ./slotify-core
 COPY slotify-app ./slotify-app
 COPY slotify-web ./slotify-web
