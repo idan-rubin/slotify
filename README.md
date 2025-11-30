@@ -39,8 +39,8 @@ docker build -f Dockerfile.cli -t slotify-app .
 # Run with sample data
 docker run -it slotify-app
 
-# Run with your own CSV (mount as volume)
-docker run -it -v /path/to/your/calendar.csv:/data/calendar.csv slotify-app /data/calendar.csv
+# Run with your own CSV (pipe via stdin)
+cat calendar.csv | docker run -i slotify-app -
 ```
 
 #### Option 2: Maven

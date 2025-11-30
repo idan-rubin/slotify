@@ -11,6 +11,8 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
@@ -22,8 +24,8 @@ import java.util.concurrent.Callable;
          description = "Find the perfect meeting slot for everyone")
 public class App implements Callable<Integer> {
 
-    @Parameters(description = "Calendar CSV file")
-    private Path calendarPath;
+    @Parameters(description = "Calendar CSV file (use '-' for stdin)")
+    private String calendarInput;
 
     @Option(names = {"-b", "--blackout"}, description = "Blackout periods CSV file")
     private Path blackoutPath;
@@ -36,9 +38,19 @@ public class App implements Callable<Integer> {
     }
 
     @Override
-    public Integer call() {
+    public Integer call() throws IOException {
         var parser = new CsvCalendarParser();
         var repository = new InMemoryScheduleRepository();
+
+        Path calendarPath;
+        if ("-".equals(calendarInput)) {
+            calendarPath = Files.createTempFile("calendar", ".csv");
+            Files.write(calendarPath, System.in.readAllBytes());
+            calendarPath.toFile().deleteOnExit();
+        } else {
+            calendarPath = Path.of(calendarInput);
+        }
+
         var schedules = parser.parseAndBuildSchedules(calendarPath);
         schedules.values().forEach(repository::save);
 
