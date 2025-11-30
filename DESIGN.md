@@ -386,7 +386,10 @@ The design supports these future extensions without breaking changes:
 | Test classes | 5 | TimeSlotTest, ScheduleTest, DefaultSchedulingServiceTest, CsvCalendarParserTest, SchedulingIntegrationTest |
 | Config files | 7 | 4 POMs + docker-compose.yml + Dockerfile + config.properties |
 | K8s manifests | 3 | namespace.yaml, redis.yaml, slotify-web.yaml |
-| **Total** | **31** | |
+| Static web files | 3 | index.html, style.css, app.js |
+| Resource files | 3 | calendar.csv, blackout.csv, test-calendar.csv |
+| Documentation | 3 | README.md, DESIGN.md, .gitignore |
+| **Total** | **40** | |
 
 ---
 
@@ -489,7 +492,7 @@ The web API includes comprehensive input validation to prevent abuse and ensure 
 | Line length | 2,000 chars | Maximum characters per line |
 | Participant name | 100 chars | Maximum name length |
 | Subject length | 500 chars | Maximum event subject length |
-| Duration | 30-120 min | Meeting duration (30/60/90/120 min) |
+| Duration | 1-120 min | Backend accepts 1-120, UI offers 30/60/90/120 |
 | Buffer | 0 or 5-15 min | Buffer between meetings |
 | Required participants | 2+ | Minimum required participants |
 | Blackouts | 10 max | Maximum blocked time periods |
