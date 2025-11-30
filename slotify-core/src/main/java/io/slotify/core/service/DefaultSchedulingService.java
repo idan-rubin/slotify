@@ -8,7 +8,6 @@ import io.slotify.core.repository.ScheduleRepository;
 
 import java.time.Duration;
 import java.time.LocalTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
