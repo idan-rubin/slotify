@@ -22,6 +22,8 @@ import java.util.concurrent.Callable;
          description = "Find the perfect meeting slot for everyone")
 public class App implements Callable<Integer> {
 
+    private static final int MIN_REQUIRED_PARTICIPANTS = 2;
+
     @Parameters(description = "Calendar CSV file", arity = "0..1")
     private Path calendarPath;
 
@@ -83,16 +85,15 @@ public class App implements Callable<Integer> {
 
             try {
                 var required = parseParticipants(requiredInput);
+                if (required.size() < MIN_REQUIRED_PARTICIPANTS) {
+                    System.out.printf("Error: At least %d required participants are needed%n%n", MIN_REQUIRED_PARTICIPANTS);
+                    continue;
+                }
                 var optional = parseParticipants(optionalInput);
                 var duration = Duration.ofMinutes(Integer.parseInt(durationStr));
 
-                if (optional.isEmpty()) {
-                    var slots = service.findAvailableSlots(required, duration);
-                    printSimpleSlots(slots);
-                } else {
-                    var slots = service.findAvailableSlots(required, optional, duration);
-                    printDetailedSlots(slots);
-                }
+                var slots = service.findAvailableSlots(required, optional, duration);
+                printSlots(slots, optional);
             } catch (Exception e) {
                 System.out.println("Error: " + e.getMessage() + "\n");
             }
@@ -106,28 +107,23 @@ public class App implements Callable<Integer> {
                 .toList();
     }
 
-    private void printSimpleSlots(List<TimeSlot> slots) {
-        if (isEmptyWithMessage(slots)) return;
-        System.out.println("Available: " + slots.stream().map(s -> s.start().toString()).toList() + "\n");
-    }
-
-    private void printDetailedSlots(List<AvailableSlot> slots) {
-        if (isEmptyWithMessage(slots)) return;
-        System.out.println("Available slots:");
-        for (var slot : slots) {
-            System.out.printf("  %s - Optional available: %s, unavailable: %s%n",
-                    slot.timeSlot().start(),
-                    slot.availableOptionalParticipants(),
-                    slot.unavailableOptionalParticipants());
-        }
-        System.out.println();
-    }
-
-    private boolean isEmptyWithMessage(List<?> slots) {
+    private void printSlots(List<AvailableSlot> slots, List<String> optional) {
         if (slots.isEmpty()) {
             System.out.println("No slots found.\n");
-            return true;
+            return;
         }
-        return false;
+        if (optional.isEmpty()) {
+            var times = slots.stream().map(s -> s.timeSlot().start().toString()).toList();
+            System.out.println("Available: " + times + "\n");
+        } else {
+            System.out.println("Available slots:");
+            for (var slot : slots) {
+                System.out.printf("  %s - Optional: available %s, unavailable %s%n",
+                        slot.timeSlot().start(),
+                        slot.availableOptionalParticipants(),
+                        slot.unavailableOptionalParticipants());
+            }
+            System.out.println();
+        }
     }
 }

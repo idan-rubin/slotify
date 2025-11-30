@@ -34,13 +34,13 @@ mvn clean install
 
 ```bash
 # Build the CLI image
-docker build -f Dockerfile.cli -t slotify-app .
+docker build --target cli -t slotify-cli .
 
 # Run with sample data
-docker run -it slotify-app
+docker run -it slotify-cli
 
 # Run interactively (prompts for file path)
-docker run -it --entrypoint java slotify-app -jar app.jar
+docker run -it --entrypoint java slotify-cli -jar app.jar
 ```
 
 #### Option 2: Maven
@@ -60,7 +60,20 @@ mvn -pl slotify-app exec:java -Dexec.args="slotify-app/src/main/resources/calend
 
 ### Run the Web App
 
-#### Option 1: Docker Compose (recommended)
+#### Option 1: Docker
+
+```bash
+# Build the web image
+docker build --target web -t slotify-web .
+
+# Run (needs Redis)
+docker run -d -p 6379:6379 redis:7-alpine
+docker run -p 8080:8080 -e REDIS_HOST=host.docker.internal slotify-web
+```
+
+Open http://localhost:8080
+
+#### Option 2: Docker Compose (recommended)
 
 ```bash
 docker-compose up --build
@@ -68,7 +81,7 @@ docker-compose up --build
 
 Open http://localhost:8080
 
-#### Option 2: Maven
+#### Option 3: Maven
 
 ```bash
 # Start Redis
