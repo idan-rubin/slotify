@@ -40,19 +40,6 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-// Buffer toggle
-let savedBuffer = 10;
-function toggleBuffer() {
-    const noBuffer = document.getElementById('no-buffer').checked;
-    const bufferInput = document.getElementById('buffer');
-    if (noBuffer) {
-        savedBuffer = bufferInput.value;
-        bufferInput.value = 0;
-    } else {
-        bufferInput.value = savedBuffer;
-    }
-}
-
 // Blackout management
 function addBlackout() {
     const start = document.getElementById('blackout-start').value;

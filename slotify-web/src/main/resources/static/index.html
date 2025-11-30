@@ -29,10 +29,12 @@
         <div class="form-row">
             <div>
                 <label for="buffer">Buffer between meetings</label>
-                <div class="inline">
-                    <input type="number" id="buffer" value="10" min="5" max="15" step="1" aria-label="Buffer time in minutes"> min
-                    <label class="checkbox-label"><input type="checkbox" id="no-buffer" onchange="toggleBuffer()"> No buffer</label>
-                </div>
+                <select id="buffer">
+                    <option value="0">No buffer</option>
+                    <option value="5">5 min</option>
+                    <option value="10" selected>10 min</option>
+                    <option value="15">15 min</option>
+                </select>
             </div>
             <div>
                 <label for="blackout">Blocked time (e.g., lunch)</label>
