@@ -8,7 +8,7 @@ Find the perfect meeting slot for everyone.
 
 Build a calendar scheduling system that finds available meeting slots for multiple participants:
 - Input: CSV file with calendar events (`Person name, Event subject, Event start time, Event end time`)
-- Output: Hourly-aligned time slots where all participants are free
+- Output: Aligned time slots where all participants are free (hourly for 60+ min, half-hourly for 30 min)
 - Working hours: 07:00 to 19:00
 
 ### Extensions Added

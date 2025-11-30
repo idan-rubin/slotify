@@ -16,7 +16,7 @@ A calendar scheduling system that finds available meeting slots for multiple par
 | **Input Format** | CSV file: `Person name, Event subject, Event start time, Event end time` |
 | **Working Hours** | 07:00 to 19:00 (24-hour format) |
 | **Scope** | Single day only |
-| **Output** | Hourly-aligned slots where ALL participants are free for the meeting duration |
+| **Output** | Aligned slots where ALL participants are free (hourly for 60+ min, half-hourly for 30 min) |
 
 **Example Output** (Alice + Jack, 60 min meeting):
 ```
@@ -81,7 +81,7 @@ A calendar scheduling system that finds available meeting slots for multiple par
 │   2. Combine busy slots + blackout periods                              │
 │   3. Apply buffer time (if configured)                                  │
 │   4. Find gaps within working hours                                     │
-│   5. Generate hourly-aligned slots                                      │
+│   5. Generate aligned slots (hourly or half-hourly based on duration)  │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -342,6 +342,9 @@ Gaps:         [07:00-08:00]    [09:40-13:00]  [14:00-16:00]  [17:00-19:00]
 
 Hourly Slots (60 min meeting):
               [07:00]  [10:00, 11:00, 12:00]  [14:00, 15:00]  [17:00, 18:00]
+
+Half-Hourly Slots (30 min meeting):
+              [07:00, 07:30]  [10:00, 10:30, 11:00, 11:30, 12:00, 12:30]  ...
 ```
 
 ### 7.3 Buffer Time Application
