@@ -15,11 +15,6 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.slotify</groupId>
-            <artifactId>slotify-contract</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
         </dependency>

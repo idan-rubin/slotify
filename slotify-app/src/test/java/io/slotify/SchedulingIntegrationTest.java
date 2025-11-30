@@ -1,10 +1,9 @@
 package io.slotify;
 
-import io.slotify.contract.SchedulingOptions;
-import io.slotify.contract.TimeSlot;
-import io.slotify.core.CsvCalendarParser;
-import io.slotify.core.DefaultSchedulingService;
-import io.slotify.core.InMemoryScheduleRepository;
+import io.slotify.core.model.TimeSlot;
+import io.slotify.core.parser.CsvCalendarParser;
+import io.slotify.core.repository.InMemoryScheduleRepository;
+import io.slotify.core.service.DefaultSchedulingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -96,18 +95,16 @@ class SchedulingIntegrationTest {
         var schedules = parser.parseAndBuildSchedules(path);
         schedules.values().forEach(repository::save);
 
-        var service = new DefaultSchedulingService(repository);
+        var serviceNoBuffer = new DefaultSchedulingService(repository);
 
         // Without buffer
-        var slotsNoBuffer = service.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slotsNoBuffer = serviceNoBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
         assertThat(slotsNoBuffer.stream().map(TimeSlot::start).toList())
                 .contains(LocalTime.of(9, 0));
 
         // With 15 min buffer - 9:00 slot should be blocked
-        var slotsWithBuffer = service.findAvailableSlots(
-                List.of("Alice"),
-                Duration.ofMinutes(60),
-                SchedulingOptions.withBuffer(Duration.ofMinutes(15)));
+        var serviceWithBuffer = new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(10));
+        var slotsWithBuffer = serviceWithBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
         assertThat(slotsWithBuffer.stream().map(TimeSlot::start).toList())
                 .doesNotContain(LocalTime.of(9, 0));
     }

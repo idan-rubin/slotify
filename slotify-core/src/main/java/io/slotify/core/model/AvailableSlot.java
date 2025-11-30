@@ -1,4 +1,4 @@
-package io.slotify.contract;
+package io.slotify.core.model;
 
 import java.util.List;
 import java.util.Objects;
@@ -17,5 +17,4 @@ public record AvailableSlot(
                 ? List.copyOf(unavailableOptionalParticipants)
                 : List.of();
     }
-
 }

@@ -1,11 +1,12 @@
-package io.slotify;
+package io.slotify.core;
 
-import io.slotify.contract.SchedulerException;
-import io.slotify.contract.TimeSlot;
+import io.slotify.core.exception.SchedulerException;
+import io.slotify.core.model.TimeSlot;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -92,5 +93,50 @@ class TimeSlotTest {
         var slot = new TimeSlot(LocalTime.of(9, 0), LocalTime.of(10, 30));
 
         assertThat(slot.toString()).isEqualTo("09:00-10:30");
+    }
+
+    @Test
+    void mergeOverlapping_withOverlap_mergesCorrectly() {
+        var slots = List.of(
+                new TimeSlot(LocalTime.of(8, 0), LocalTime.of(9, 0)),
+                new TimeSlot(LocalTime.of(8, 30), LocalTime.of(10, 0)),
+                new TimeSlot(LocalTime.of(14, 0), LocalTime.of(15, 0))
+        );
+
+        var merged = TimeSlot.mergeOverlapping(slots);
+
+        assertThat(merged).hasSize(2);
+        assertThat(merged.get(0)).isEqualTo(new TimeSlot(LocalTime.of(8, 0), LocalTime.of(10, 0)));
+        assertThat(merged.get(1)).isEqualTo(new TimeSlot(LocalTime.of(14, 0), LocalTime.of(15, 0)));
+    }
+
+    @Test
+    void mergeOverlapping_withAdjacentSlots_mergesCorrectly() {
+        var slots = List.of(
+                new TimeSlot(LocalTime.of(9, 0), LocalTime.of(10, 0)),
+                new TimeSlot(LocalTime.of(10, 0), LocalTime.of(11, 0))
+        );
+
+        var merged = TimeSlot.mergeOverlapping(slots);
+
+        assertThat(merged).hasSize(1);
+        assertThat(merged.getFirst()).isEqualTo(new TimeSlot(LocalTime.of(9, 0), LocalTime.of(11, 0)));
+    }
+
+    @Test
+    void mergeOverlapping_withNoOverlap_keepsAll() {
+        var slots = List.of(
+                new TimeSlot(LocalTime.of(8, 0), LocalTime.of(9, 0)),
+                new TimeSlot(LocalTime.of(10, 0), LocalTime.of(11, 0))
+        );
+
+        var merged = TimeSlot.mergeOverlapping(slots);
+
+        assertThat(merged).hasSize(2);
+    }
+
+    @Test
+    void mergeOverlapping_withEmptyList_returnsEmpty() {
+        assertThat(TimeSlot.mergeOverlapping(List.of())).isEmpty();
     }
 }

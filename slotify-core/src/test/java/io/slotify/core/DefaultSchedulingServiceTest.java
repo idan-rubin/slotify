@@ -1,8 +1,10 @@
 package io.slotify.core;
 
-import io.slotify.contract.SchedulerException;
-import io.slotify.contract.SchedulingOptions;
-import io.slotify.contract.TimeSlot;
+import io.slotify.core.exception.SchedulerException;
+import io.slotify.core.model.Schedule;
+import io.slotify.core.model.TimeSlot;
+import io.slotify.core.repository.InMemoryScheduleRepository;
+import io.slotify.core.service.DefaultSchedulingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -85,6 +87,64 @@ class DefaultSchedulingServiceTest {
     }
 
     @Test
+    void findAvailableSlots_withNullParticipants_throwsException() {
+        assertThatThrownBy(() -> service.findAvailableSlots(null, List.of(), Duration.ofMinutes(60)))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void findAvailableSlots_withEmptyParticipants_throwsException() {
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of(), List.of(), Duration.ofMinutes(60)))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void findAvailableSlots_withNullDuration_throwsException() {
+        repository.save(new Schedule("Alice", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), null))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void findAvailableSlots_withZeroDuration_throwsException() {
+        repository.save(new Schedule("Alice", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), Duration.ZERO))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void findAvailableSlots_withNegativeDuration_throwsException() {
+        repository.save(new Schedule("Alice", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), Duration.ofMinutes(-30)))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void constructor_withInvalidBuffer_throwsException() {
+        assertThatThrownBy(() -> new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(3)))
+                .isInstanceOf(SchedulerException.class)
+                .hasMessageContaining("between 5 and 15");
+    }
+
+    @Test
+    void constructor_withNullRepository_throwsException() {
+        assertThatThrownBy(() -> new DefaultSchedulingService(null))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
+    }
+
+    @Test
     void findAvailableSlots_with30MinMeeting_findsMoreSlots() {
         repository.save(new Schedule("Alice", List.of(
                 new TimeSlot(LocalTime.of(8, 0), LocalTime.of(8, 40))
@@ -103,8 +163,8 @@ class DefaultSchedulingServiceTest {
                 new TimeSlot(LocalTime.of(10, 0), LocalTime.of(11, 0))
         )));
 
-        var options = SchedulingOptions.withBuffer(Duration.ofMinutes(15));
-        var slots = service.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60), options);
+        var serviceWithBuffer = new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(10));
+        var slots = serviceWithBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
 
         // 9:00 slot should be blocked (would end at 10:00, needs 15 min buffer before 10:00 meeting)
         var startTimes = slots.stream().map(TimeSlot::start).toList();

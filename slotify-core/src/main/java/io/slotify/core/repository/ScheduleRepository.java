@@ -1,4 +1,6 @@
-package io.slotify.core;
+package io.slotify.core.repository;
+
+import io.slotify.core.model.Schedule;
 
 import java.util.Optional;
 import java.util.Set;

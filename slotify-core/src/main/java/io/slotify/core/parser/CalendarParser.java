@@ -1,6 +1,7 @@
-package io.slotify.core;
+package io.slotify.core.parser;
 
-import io.slotify.contract.TimeSlot;
+import io.slotify.core.model.Schedule;
+import io.slotify.core.model.TimeSlot;
 
 import java.nio.file.Path;
 import java.util.List;

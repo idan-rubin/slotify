@@ -1,8 +1,11 @@
-package io.slotify.contract;
+package io.slotify.core.exception;
 
 public class SchedulerException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public enum ErrorType {
+        INVALID_ARGUMENT,
         INVALID_TIME_RANGE,
         PARTICIPANT_NOT_FOUND,
         PARSE_ERROR,

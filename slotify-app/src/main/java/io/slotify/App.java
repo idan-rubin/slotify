@@ -1,76 +1,125 @@
 package io.slotify;
 
-import io.slotify.contract.SchedulingOptions;
-import io.slotify.contract.SchedulingService;
-import io.slotify.contract.TimeSlot;
-import io.slotify.core.CalendarParser;
-import io.slotify.core.CsvCalendarParser;
-import io.slotify.core.DefaultSchedulingService;
-import io.slotify.core.RedisScheduleRepository;
-import io.slotify.core.ScheduleRepository;
-import redis.clients.jedis.JedisPool;
+import io.slotify.core.model.AvailableSlot;
+import io.slotify.core.model.TimeSlot;
+import io.slotify.core.parser.CsvCalendarParser;
+import io.slotify.core.repository.InMemoryScheduleRepository;
+import io.slotify.core.service.DefaultSchedulingService;
+import io.slotify.core.service.SchedulingService;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
-import java.util.logging.Logger;
+import java.util.Scanner;
+import java.util.concurrent.Callable;
 
-public class App {
+@Command(name = "slotify", mixinStandardHelpOptions = true, version = "1.0",
+         description = "Find the perfect meeting slot for everyone")
+public class App implements Callable<Integer> {
 
-    private static final Logger LOG = Logger.getLogger(App.class.getName());
+    @Parameters(description = "Calendar CSV file")
+    private Path calendarPath;
+
+    @Option(names = {"-b", "--blackout"}, description = "Blackout periods CSV file")
+    private Path blackoutPath;
+
+    @Option(names = {"--buffer"}, description = "Buffer minutes between meetings", defaultValue = "0")
+    private int bufferMinutes;
 
     public static void main(String[] args) {
-        var calendarPath = Path.of("src/main/resources/calendar.csv");
-        var blackoutPath = Path.of("src/main/resources/blackout.csv");
+        System.exit(new CommandLine(new App()).execute(args));
+    }
 
-        try (var jedisPool = new JedisPool("localhost", 6379)) {
-            ScheduleRepository repository = new RedisScheduleRepository(jedisPool);
-            CalendarParser parser = new CsvCalendarParser();
+    @Override
+    public Integer call() {
+        var parser = new CsvCalendarParser();
+        var repository = new InMemoryScheduleRepository();
+        var schedules = parser.parseAndBuildSchedules(calendarPath);
+        schedules.values().forEach(repository::save);
 
-            repository.clear();
-            var schedules = parser.parseAndBuildSchedules(calendarPath);
-            schedules.values().forEach(repository::save);
-            LOG.info("Loaded %d participants".formatted(schedules.size()));
+        List<TimeSlot> blackouts = blackoutPath != null
+                ? parser.parseBlackouts(blackoutPath)
+                : List.of();
 
-            var blackouts = parser.parseBlackouts(blackoutPath);
-            LOG.info("Loaded %d blackout periods".formatted(blackouts.size()));
+        var buffer = bufferMinutes == 0 ? null : Duration.ofMinutes(bufferMinutes);
+        var service = new DefaultSchedulingService(repository, blackouts, buffer);
+        var participants = schedules.keySet().stream().sorted().toList();
 
-            SchedulingService service = new DefaultSchedulingService(repository, blackouts);
+        System.out.println("Loaded " + participants.size() + " participants: " + participants);
+        runInteractiveLoop(service);
+        return 0;
+    }
 
-            // Example: Find slots for Alice and Jack (60 min meeting)
-            var participants = List.of("Alice", "Jack");
-            var duration = Duration.ofMinutes(60);
+    private void runInteractiveLoop(SchedulingService service) {
+        System.out.println("Type 'quit' to exit.\n");
 
-            System.out.println("\n=== Available slots for Alice + Jack (60 min) ===");
-            var slots = service.findAvailableSlots(participants, duration);
-            printSlots(slots);
+        try (var scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("Required participants (comma-separated): ");
+                var requiredInput = scanner.nextLine().trim();
+                if (requiredInput.equalsIgnoreCase("quit")) break;
 
-            // Example with buffer
-            System.out.println("\n=== With 15 min buffer between meetings ===");
-            var slotsWithBuffer = service.findAvailableSlots(participants, duration,
-                    SchedulingOptions.withBuffer(Duration.ofMinutes(15)));
-            printSlots(slotsWithBuffer);
+                System.out.print("Optional participants (comma-separated, or empty): ");
+                var optionalInput = scanner.nextLine().trim();
+                if (optionalInput.equalsIgnoreCase("quit")) break;
 
-            // Example with optional participants
-            System.out.println("\n=== Alice required, Jack + Bob optional ===");
-            var advancedSlots = service.findAvailableSlots(
-                    List.of("Alice"),
-                    List.of("Jack", "Bob"),
-                    duration);
+                System.out.print("Duration (minutes): ");
+                var durationStr = scanner.nextLine().trim();
+                if (durationStr.equalsIgnoreCase("quit")) break;
 
-            for (var slot : advancedSlots) {
-                System.out.println("%s - available: %s, unavailable: %s".formatted(
-                        slot.timeSlot().start(),
-                        slot.availableOptionalParticipants(),
-                        slot.unavailableOptionalParticipants()));
+                try {
+                    var required = parseParticipants(requiredInput);
+                    var optional = parseParticipants(optionalInput);
+                    var duration = Duration.ofMinutes(Integer.parseInt(durationStr));
+
+                    if (optional.isEmpty()) {
+                        var slots = service.findAvailableSlots(required, duration);
+                        printSimpleSlots(slots);
+                    } else {
+                        var slots = service.findAvailableSlots(required, optional, duration);
+                        printDetailedSlots(slots);
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage() + "\n");
+                }
             }
         }
     }
 
-    private static void printSlots(List<TimeSlot> slots) {
-        var times = slots.stream()
-                .map(s -> s.start().toString())
+    private List<String> parseParticipants(String input) {
+        return Arrays.stream(input.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
                 .toList();
-        System.out.println(String.join(", ", times));
+    }
+
+    private void printSimpleSlots(List<TimeSlot> slots) {
+        if (isEmptyWithMessage(slots)) return;
+        System.out.println("Available: " + slots.stream().map(s -> s.start().toString()).toList() + "\n");
+    }
+
+    private void printDetailedSlots(List<AvailableSlot> slots) {
+        if (isEmptyWithMessage(slots)) return;
+        System.out.println("Available slots:");
+        for (var slot : slots) {
+            System.out.printf("  %s - Optional available: %s, unavailable: %s%n",
+                    slot.timeSlot().start(),
+                    slot.availableOptionalParticipants(),
+                    slot.unavailableOptionalParticipants());
+        }
+        System.out.println();
+    }
+
+    private boolean isEmptyWithMessage(List<?> slots) {
+        if (slots.isEmpty()) {
+            System.out.println("No slots found.\n");
+            return true;
+        }
+        return false;
     }
 }

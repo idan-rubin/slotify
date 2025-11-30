@@ -2,9 +2,52 @@
 
 Find the perfect meeting slot for everyone.
 
+## Background
+
+### Original Assignment
+
+Build a calendar scheduling system that finds available meeting slots for multiple participants:
+- Input: CSV file with calendar events (`Person name, Event subject, Event start time, Event end time`)
+- Output: Hourly-aligned time slots where all participants are free
+- Working hours: 07:00 to 19:00
+
+### Extensions Added
+
+| Feature | Description |
+|---------|-------------|
+| **Optional Participants** | Support for required + optional participants with availability ranking |
+| **Blackout Periods** | Blocked time windows (e.g., lunch 12:00-13:00) from a separate CSV |
+| **Buffer Time** | Configurable gap between meetings |
+| **Web App** | Visual timeline UI in addition to the console app |
+
 ## Quick Start
 
-### Run Locally with Docker Compose
+### Build
+
+```bash
+mvn clean install
+```
+
+### Run the CLI App
+
+The CLI app is an interactive tool that doesn't require Redis:
+
+```bash
+mvn -pl slotify-app exec:java -Dexec.args="slotify-app/src/main/resources/calendar.csv"
+```
+
+Options:
+- `-b, --blackout <file>` - Blackout periods CSV file
+- `--buffer <minutes>` - Buffer minutes between meetings
+
+Example with blackout and buffer:
+```bash
+mvn -pl slotify-app exec:java -Dexec.args="slotify-app/src/main/resources/calendar.csv -b slotify-app/src/main/resources/blackout.csv --buffer 15"
+```
+
+### Run the Web App
+
+#### Option 1: Docker Compose (recommended)
 
 ```bash
 docker-compose up --build
@@ -12,14 +55,13 @@ docker-compose up --build
 
 Open http://localhost:8080
 
-### Run Locally with Maven
+#### Option 2: Maven
 
 ```bash
 # Start Redis
 docker run -d -p 6379:6379 redis:7-alpine
 
-# Build and run
-mvn clean install
+# Run web app
 mvn -pl slotify-web exec:java
 ```
 
@@ -55,14 +97,34 @@ kubectl get pods -n slotify
 kubectl get svc slotify-web -n slotify
 ```
 
+## CSV Format
+
+### Calendar File
+
+```csv
+Alice,Team standup,8:00,8:30
+Alice,Project review,8:30,9:30
+Jack,Team standup,8:00,8:50
+Jack,Code review,9:00,9:40
+```
+
+Format: `Participant name, Event subject, Start time (H:mm), End time (H:mm)`
+
+### Blackout File
+
+```csv
+12:00,13:00
+```
+
+Format: `Start time (H:mm), End time (H:mm)`
+
 ## Project Structure
 
 ```
 slotify/
-├── slotify-contract/   # DTOs and interfaces
-├── slotify-core/       # Business logic
-├── slotify-app/        # Console app
-├── slotify-web/        # Web UI (Javalin)
+├── slotify-core/       # Domain models, business logic, repository interfaces
+├── slotify-app/        # CLI application (picocli) - uses in-memory storage
+├── slotify-web/        # Web UI (Javalin) - uses Redis storage
 └── k8s/                # Kubernetes manifests
 ```
 

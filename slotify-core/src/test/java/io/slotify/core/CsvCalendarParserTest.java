@@ -1,7 +1,8 @@
 package io.slotify.core;
 
-import io.slotify.contract.SchedulerException;
-import io.slotify.contract.TimeSlot;
+import io.slotify.core.exception.SchedulerException;
+import io.slotify.core.model.TimeSlot;
+import io.slotify.core.parser.CsvCalendarParser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

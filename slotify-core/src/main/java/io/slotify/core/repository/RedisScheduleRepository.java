@@ -1,18 +1,24 @@
-package io.slotify.core;
+package io.slotify.core.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.slotify.contract.SchedulerException;
+import io.slotify.core.exception.SchedulerException;
+import io.slotify.core.model.Schedule;
+import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.params.ScanParams;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
 public class RedisScheduleRepository implements ScheduleRepository {
 
     private static final String KEY_PREFIX = "schedule:";
+    private static final int MAX_SCAN_ITERATIONS = 10000;
 
     private final JedisPool jedisPool;
     private final ObjectMapper objectMapper;
@@ -52,19 +58,39 @@ public class RedisScheduleRepository implements ScheduleRepository {
     @Override
     public Set<String> getAllParticipantNames() {
         try (var jedis = jedisPool.getResource()) {
-            return jedis.keys(KEY_PREFIX + "*").stream()
-                    .map(key -> key.substring(KEY_PREFIX.length()))
-                    .collect(Collectors.toSet());
+            Set<String> names = new HashSet<>();
+            scanKeys(jedis, keys -> {
+                for (String key : keys) {
+                    names.add(key.substring(KEY_PREFIX.length()));
+                }
+            });
+            return names;
         }
     }
 
     @Override
     public void clear() {
         try (var jedis = jedisPool.getResource()) {
-            var keys = jedis.keys(KEY_PREFIX + "*");
-            if (!keys.isEmpty()) {
-                jedis.del(keys.toArray(new String[0]));
-            }
+            scanKeys(jedis, keys -> {
+                if (!keys.isEmpty()) {
+                    jedis.del(keys.toArray(new String[0]));
+                }
+            });
         }
+    }
+
+    private void scanKeys(Jedis jedis, Consumer<List<String>> keyProcessor) {
+        var scanParams = new ScanParams().match(KEY_PREFIX + "*").count(100);
+        String cursor = "0";
+        int iterations = 0;
+        do {
+            if (++iterations > MAX_SCAN_ITERATIONS) {
+                throw new SchedulerException(SchedulerException.ErrorType.REPOSITORY_ERROR,
+                        "Redis scan exceeded maximum iterations");
+            }
+            var result = jedis.scan(cursor, scanParams);
+            keyProcessor.accept(result.getResult());
+            cursor = result.getCursor();
+        } while (!cursor.equals("0"));
     }
 }

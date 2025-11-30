@@ -41,10 +41,10 @@ A calendar scheduling system that finds available meeting slots for multiple par
 
 ### My Guidelines
 
-1. Multi-module Maven layout: contracts, core, app, web
+1. Multi-module Maven layout: core, app, web
 2. Modern, clean code (Java 17+ features, no boilerplate)
 3. Proper interfaces (program to interfaces, not implementations)
-4. Redis for storage (not in-memory or traditional DB)
+4. Redis for web app storage (in-memory for CLI)
 5. No useless comments (self-documenting code)
 6. Pre-processing moved to input ingestion to simplify the scheduling API
 
@@ -84,7 +84,8 @@ A calendar scheduling system that finds available meeting slots for multiple par
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         REDIS REPOSITORY                                 │
+│                        SCHEDULE REPOSITORY                               │
+│                  (Redis for web, In-memory for CLI)                      │
 │                                                                          │
 │   Pre-computed Schedule objects with merged busy slots per participant  │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -103,14 +104,14 @@ PHASE 1 - LOAD TIME (once, during initialization):
 │       ↓                                                         │
 │  For each participant: merge overlapping busy slots             │
 │       ↓                                                         │
-│  Store Schedule objects in Redis                                │
+│  Store Schedule objects in repository                           │
 └─────────────────────────────────────────────────────────────────┘
 
 PHASE 2 - QUERY TIME (lightweight):
 ┌─────────────────────────────────────────────────────────────────┐
 │  findAvailableSlots(["Alice", "Jack"], 60min)                   │
 │       ↓                                                         │
-│  Fetch pre-computed Schedules from Redis                        │
+│  Fetch pre-computed Schedules from repository                   │
 │       ↓                                                         │
 │  Combine busy slots + blackouts + apply buffer                  │
 │       ↓                                                         │
@@ -127,64 +128,61 @@ slotify/
 ├── Dockerfile                      # Multi-stage build for web app
 ├── k8s/                            # Kubernetes manifests
 │
-├── slotify-contract/               # API CONTRACTS MODULE
-│   └── src/main/java/io/slotify/contract/
-│       ├── TimeSlot.java           # Immutable time range DTO
-│       ├── CalendarEvent.java      # Event DTO
-│       ├── AvailableSlot.java      # Result with optional participant info
-│       ├── SchedulingOptions.java  # Buffer time configuration
-│       ├── SchedulingService.java  # Main service interface
-│       └── SchedulerException.java # Exception with error types
-│
-├── slotify-core/                   # BUSINESS LOGIC MODULE
+├── slotify-core/                   # DOMAIN & BUSINESS LOGIC MODULE
 │   └── src/main/java/io/slotify/core/
-│       ├── Schedule.java           # Pre-computed busy slots per person
-│       ├── ScheduleRepository.java # Repository interface
-│       ├── RedisScheduleRepository.java
-│       ├── CsvCalendarParser.java  # Parses calendar.csv + blackout.csv
-│       └── DefaultSchedulingService.java
+│       ├── exception/
+│       │   └── SchedulerException.java
+│       ├── model/
+│       │   ├── TimeSlot.java       # Immutable time range
+│       │   ├── CalendarEvent.java  # Event DTO
+│       │   ├── Schedule.java       # Pre-computed busy slots per person
+│       │   ├── AvailableSlot.java  # Result with optional participant info
+│       │   └── Constants.java      # Shared constants
+│       ├── parser/
+│       │   ├── CalendarParser.java # Parser interface
+│       │   └── CsvCalendarParser.java
+│       ├── repository/
+│       │   ├── ScheduleRepository.java
+│       │   ├── InMemoryScheduleRepository.java
+│       │   └── RedisScheduleRepository.java
+│       └── service/
+│           ├── SchedulingService.java
+│           └── DefaultSchedulingService.java
 │
-├── slotify-app/                    # CONSOLE APPLICATION MODULE
-│   └── src/
-│       ├── main/java/io/slotify/App.java
-│       └── main/resources/
-│           ├── calendar.csv        # Input data
-│           └── blackout.csv        # Forbidden time slots
+├── slotify-app/                    # CLI APPLICATION MODULE
+│   └── src/main/java/io/slotify/App.java
 │
 └── slotify-web/                    # WEB APPLICATION MODULE
-    └── src/
-        ├── main/java/io/slotify/web/WebApp.java
-        └── main/resources/static/
-            └── index.html          # Web UI with timeline visualization
+    └── src/main/java/io/slotify/web/
+        ├── WebApp.java             # Javalin REST API
+        └── Config.java             # Configuration loader
 ```
 
 **Module Responsibilities:**
 
-| Module | Purpose | Dependencies |
-|--------|---------|--------------|
-| `slotify-contract` | DTOs, interfaces, exceptions (API surface) | None |
-| `slotify-core` | Business logic, algorithms, implementations | contract |
-| `slotify-app` | Console entry point, configuration, resources | core |
-| `slotify-web` | Web UI with Javalin, REST API, visualization | core |
+| Module | Purpose | Storage | Dependencies |
+|--------|---------|---------|--------------|
+| `slotify-core` | Domain models, business logic, interfaces, implementations | - | None |
+| `slotify-app` | CLI entry point with picocli | In-memory | core |
+| `slotify-web` | Web UI with Javalin, REST API | Redis | core |
 
 **Why this structure?**
-- External clients can depend only on `slotify-contract` without implementation details
 - Clear separation of concerns
-- Supports future packaging as a library
+- Core module is self-contained with all domain logic
+- App modules are thin wrappers around core
 
 ---
 
 ## 5. Design Decisions
 
-### 5.1 Why Repository Pattern with Redis?
+### 5.1 Why Repository Pattern with Two Implementations?
 
-| Alternative | Pros | Cons | Decision |
-|-------------|------|------|----------|
-| In-memory Map | Simple, fast | Lost on restart, not scalable | No |
-| Database (SQL) | ACID, queryable | Overkill for single-day, complex setup | No |
-| **Redis** | Fast, persistent, simple API, Docker-friendly | Requires Docker | **Yes** |
+| Implementation | Used By | Pros | Cons |
+|----------------|---------|------|------|
+| **InMemoryScheduleRepository** | CLI app | Simple, no dependencies | Lost on restart |
+| **RedisScheduleRepository** | Web app | Persistent, scalable, Docker-friendly | Requires Redis |
 
-Redis provides the right balance: persistent enough for the demo, simple to set up with Docker, and demonstrates real-world patterns.
+The repository interface allows swapping storage implementations. The CLI app uses in-memory for simplicity (no external dependencies). The web app uses Redis for persistence across restarts and to demonstrate real-world patterns.
 
 ### 5.2 Why Pre-compute Busy Slots at Load Time?
 
@@ -222,17 +220,23 @@ public List<TimeSlot> findAvailableSlots(...) {
 
 Blackouts (like lunch) are typically organization-wide policies, not per-query decisions. A config file is simpler and matches real-world usage.
 
-### 5.4 Why Builder Pattern for SchedulingOptions?
+### 5.4 Why External Configuration via Config Class?
 
-```java
-// Clean, readable API:
-SchedulingOptions.withBuffer(Duration.ofMinutes(15))
-
-// vs constructor with many parameters:
-new SchedulingOptions(Duration.ofMinutes(15), null, null, false)
+```properties
+# config.properties
+redis.host=localhost
+redis.port=6379
+buffer.minutes=15
 ```
 
-Builder pattern provides a fluent API and makes defaults explicit.
+```java
+// Config singleton loads from properties file
+var config = Config.get();
+var buffer = config.bufferBetweenMeetings();
+var service = new DefaultSchedulingService(repository, blackouts, buffer);
+```
+
+Configuration is externalized to a properties file, making it easy to change without code modifications. The singleton `Config` class provides type-safe access to configuration values.
 
 ### 5.5 Why Single Exception with Error Types?
 
@@ -267,53 +271,44 @@ public interface SchedulingService {
         Duration meetingDuration
     );
 
-    // Basic with options (buffer time)
-    List<TimeSlot> findAvailableSlots(
-        List<String> participants,
-        Duration meetingDuration,
-        SchedulingOptions options
-    );
-
     // Advanced: required + optional participants
     List<AvailableSlot> findAvailableSlots(
         List<String> requiredParticipants,
         List<String> optionalParticipants,
         Duration meetingDuration
     );
-
-    // Advanced with options
-    List<AvailableSlot> findAvailableSlots(
-        List<String> requiredParticipants,
-        List<String> optionalParticipants,
-        Duration meetingDuration,
-        SchedulingOptions options
-    );
 }
 ```
 
-### 6.2 DTOs
+Buffer time and blackout periods are configured at service construction time via `DefaultSchedulingService` constructor.
+
+### 6.2 Domain Models (Records)
 
 ```java
 // Immutable time range (single day, LocalTime only)
-public final class TimeSlot implements Comparable<TimeSlot> {
-    private final LocalTime start;
-    private final LocalTime end;
+public record TimeSlot(LocalTime start, LocalTime end) {
+    public boolean overlaps(TimeSlot other);
+    public TimeSlot expandBy(Duration buffer);
+    public static List<TimeSlot> mergeOverlapping(List<TimeSlot> slots);
+    public static LocalTime max(LocalTime first, LocalTime second);
+    public static LocalTime min(LocalTime first, LocalTime second);
 }
 
 // Result with optional participant availability
-public final class AvailableSlot {
-    private final TimeSlot timeSlot;
-    private final List<String> availableOptionalParticipants;
-    private final List<String> unavailableOptionalParticipants;
+public record AvailableSlot(
+    TimeSlot timeSlot,
+    List<String> availableOptionalParticipants,
+    List<String> unavailableOptionalParticipants
+) {}
+
+// Pre-computed busy slots per participant
+public record Schedule(String participantName, List<TimeSlot> busySlots) {
+    public static Schedule fromEvents(String participantName, List<CalendarEvent> events);
+    public boolean isBusyDuring(TimeSlot timeSlot);
 }
 
-// Configurable options
-public final class SchedulingOptions {
-    private final Duration bufferBetweenMeetings;
-
-    public static SchedulingOptions defaults();
-    public static SchedulingOptions withBuffer(Duration buffer);
-}
+// Calendar event from CSV
+public record CalendarEvent(String participantName, String subject, TimeSlot timeSlot) {}
 ```
 
 ---
@@ -376,16 +371,17 @@ The design supports these future extensions without breaking changes:
 
 | Category | Count | Files |
 |----------|-------|-------|
-| Contract classes | 6 | TimeSlot, CalendarEvent, AvailableSlot, SchedulingOptions, SchedulingService, SchedulerException |
-| Core classes | 5 | Schedule, ScheduleRepository, RedisScheduleRepository, CsvCalendarParser, DefaultSchedulingService |
+| Core model classes | 5 | TimeSlot, CalendarEvent, Schedule, AvailableSlot, Constants |
+| Core service classes | 2 | SchedulingService (interface), DefaultSchedulingService |
+| Core repository classes | 3 | ScheduleRepository (interface), InMemoryScheduleRepository, RedisScheduleRepository |
+| Core parser classes | 2 | CalendarParser (interface), CsvCalendarParser |
+| Core exception | 1 | SchedulerException |
 | App classes | 1 | App |
-| Web classes | 1 | WebApp |
-| Web resources | 1 | index.html (with timeline visualization) |
-| Test classes | 5 | ScheduleTest, CsvCalendarParserTest, DefaultSchedulingServiceTest, TimeSlotTest, SchedulingIntegrationTest |
-| Config files | 7 | 5 POMs + docker-compose.yml + Dockerfile |
+| Web classes | 2 | WebApp, Config |
+| Test classes | 4 | TimeSlotTest, ScheduleTest, DefaultSchedulingServiceTest, SchedulingIntegrationTest |
+| Config files | 7 | 4 POMs + docker-compose.yml + Dockerfile + config.properties |
 | K8s manifests | 3 | namespace.yaml, redis.yaml, slotify-web.yaml |
-| Resources | 3 | calendar.csv, blackout.csv, test-calendar.csv |
-| **Total** | **32** | |
+| **Total** | **30** | |
 
 ---
 
@@ -436,3 +432,4 @@ Legend: ░ Free (light green)  █ Busy (red)  ▓ Available slot (green)
 |----------|--------|-------------|
 | `/api/upload` | POST | Upload CSV, returns participants + busy slots |
 | `/api/availability` | POST | Find available slots for selected participants |
+| `/api/meeting-request` | POST | Find slots with required + optional participants |

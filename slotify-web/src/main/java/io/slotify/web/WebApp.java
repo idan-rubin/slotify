@@ -1,106 +1,263 @@
 package io.slotify.web;
 
-import io.slotify.contract.SchedulingOptions;
-import io.slotify.contract.SchedulingService;
-import io.slotify.contract.TimeSlot;
-import io.slotify.core.CsvCalendarParser;
-import io.slotify.core.DefaultSchedulingService;
-import io.slotify.core.RedisScheduleRepository;
-import io.slotify.core.Schedule;
-import io.slotify.core.ScheduleRepository;
+import io.slotify.core.model.Constants;
+import io.slotify.core.exception.SchedulerException;
+import io.slotify.core.model.AvailableSlot;
+import io.slotify.core.model.TimeSlot;
+import io.slotify.core.parser.CsvCalendarParser;
+import io.slotify.core.repository.InMemoryScheduleRepository;
+import io.slotify.core.repository.RedisScheduleRepository;
+import io.slotify.core.repository.ScheduleRepository;
+import io.slotify.core.service.DefaultSchedulingService;
+import io.slotify.core.service.SchedulingService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.UploadedFile;
 import redis.clients.jedis.JedisPool;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 
 public class WebApp {
 
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    private static final int MAX_DURATION_MINUTES = 480; // 8 hours
+    private static final int MAX_PARTICIPANTS = 100;
+    private static final String INVALID_CHARS = ":*[]{}\\\"'";
+
     private final ScheduleRepository repository;
     private final CsvCalendarParser parser = new CsvCalendarParser();
-    private SchedulingService service;
+    private final SchedulingService service;
+    private final JedisPool jedisPool;
+    private final ReadWriteLock dataLock = new ReentrantReadWriteLock();
 
     public WebApp() {
-        var redisHost = System.getenv("REDIS_HOST");
+        var config = Config.get();
+        var redisHost = config.redisHost();
         if (redisHost != null) {
-            var jedisPool = new JedisPool(redisHost, 6379);
+            this.jedisPool = new JedisPool(redisHost, config.redisPort());
             this.repository = new RedisScheduleRepository(jedisPool);
         } else {
-            this.repository = new InMemoryRepository();
+            this.jedisPool = null;
+            this.repository = new InMemoryScheduleRepository();
         }
-        this.service = new DefaultSchedulingService(repository);
+
+        var buffer = config.bufferBetweenMeetings();
+        this.service = new DefaultSchedulingService(repository, List.of(), buffer);
+    }
+
+    public void shutdown() {
+        if (jedisPool != null) {
+            jedisPool.close();
+        }
     }
 
     public static void main(String[] args) {
         var app = new WebApp();
-        Javalin.create(config -> config.staticFiles.add("/static"))
+        Runtime.getRuntime().addShutdownHook(new Thread(app::shutdown));
+        Javalin.create(config -> {
+                    config.staticFiles.add("/static");
+                })
+                .exception(ValidationException.class, (e, ctx) ->
+                        ctx.status(400).json(Map.of("error", e.getMessage())))
+                .exception(SchedulerException.class, (e, ctx) ->
+                        ctx.status(400).json(Map.of("error", e.getMessage())))
+                .exception(Exception.class, (e, ctx) ->
+                        ctx.status(500).json(Map.of("error", "Internal server error")))
                 .post("/api/upload", app::upload)
                 .post("/api/availability", app::availability)
+                .post("/api/meeting-request", app::meetingRequest)
                 .start(8080);
     }
 
-    private void upload(Context ctx) throws Exception {
+    private void upload(Context ctx) {
         UploadedFile file = ctx.uploadedFile("file");
         if (file == null) {
             ctx.status(400).json(Map.of("error", "No file uploaded"));
             return;
         }
 
-        Path temp = Files.createTempFile("calendar", ".csv");
+        var filename = file.filename().toLowerCase();
+        if (!filename.endsWith(".csv")) {
+            ctx.status(400).json(Map.of("error", "Only CSV files are allowed"));
+            return;
+        }
+
+        if (file.size() > MAX_FILE_SIZE) {
+            ctx.status(400).json(Map.of("error", "File too large (max 5MB)"));
+            return;
+        }
+
+        Path temp = null;
         try {
-            try (var reader = new BufferedReader(new InputStreamReader(file.content()))) {
-                Files.writeString(temp, reader.lines().collect(Collectors.joining("\n")));
+            temp = Files.createTempFile("calendar", ".csv");
+            try (InputStream in = file.content();
+                 OutputStream out = Files.newOutputStream(temp)) {
+                in.transferTo(out);
             }
 
-            repository.clear();
             var schedules = parser.parseAndBuildSchedules(temp);
-            schedules.values().forEach(repository::save);
-            service = new DefaultSchedulingService(repository);
+            dataLock.writeLock().lock();
+            try {
+                repository.clear();
+                schedules.values().forEach(repository::save);
+            } finally {
+                dataLock.writeLock().unlock();
+            }
 
             var busySlots = schedules.entrySet().stream()
                     .collect(Collectors.toMap(
                             Map.Entry::getKey,
-                            e -> e.getValue().busySlots().stream()
-                                    .map(slot -> Map.of("start", slot.start().toString(), "end", slot.end().toString()))
+                            entry -> entry.getValue().busySlots().stream()
+                                    .map(BusySlotResponse::from)
                                     .toList()
                     ));
-            ctx.json(Map.of(
-                    "participants", schedules.keySet().stream().sorted().toList(),
-                    "busySlots", busySlots
-            ));
+            var participants = schedules.keySet().stream().sorted().toList();
+            ctx.json(new UploadResponse(participants, busySlots));
+        } catch (IOException e) {
+            ctx.status(500).json(Map.of("error", "Failed to process file"));
         } finally {
-            Files.deleteIfExists(temp);
+            deleteTempFile(temp);
         }
     }
 
     private void availability(Context ctx) {
         var body = ctx.bodyAsClass(AvailabilityRequest.class);
-        var options = body.bufferMinutes() > 0
-                ? SchedulingOptions.withBuffer(Duration.ofMinutes(body.bufferMinutes()))
-                : SchedulingOptions.defaults();
 
-        var slots = service.findAvailableSlots(body.participants(), Duration.ofMinutes(body.durationMinutes()), options);
-        ctx.json(Map.of("slots", slots.stream().map(TimeSlot::start).map(Object::toString).toList()));
+        validateParticipantList(body.participants(), "participants", true);
+        validateDuration(body.durationMinutes());
+
+        var duration = Duration.ofMinutes(body.durationMinutes());
+
+        var slots = withReadLock(() -> service.findAvailableSlots(body.participants(), duration));
+        var startTimes = slots.stream().map(TimeSlot::start).map(Object::toString).toList();
+        ctx.json(Map.of("slots", startTimes));
     }
 
-    record AvailabilityRequest(List<String> participants, int durationMinutes, int bufferMinutes) {}
+    private void meetingRequest(Context ctx) {
+        var body = ctx.bodyAsClass(MeetingRequest.class);
+        var optional = body.optional() != null ? body.optional() : List.<String>of();
 
-    private static class InMemoryRepository implements ScheduleRepository {
-        private final Map<String, Schedule> data = new HashMap<>();
-        public void save(Schedule s) { data.put(s.participantName(), s); }
-        public Optional<Schedule> findByParticipant(String name) { return Optional.ofNullable(data.get(name)); }
-        public Set<String> getAllParticipantNames() { return data.keySet(); }
-        public void clear() { data.clear(); }
+        validateParticipantList(body.required(), "required participants", true);
+        validateParticipantList(optional, "optional participants", false);
+        validateDuration(body.durationMinutes());
+        validateTotalParticipants(body.required().size() + optional.size());
+        validateNoOverlap(body.required(), optional);
+
+        var duration = Duration.ofMinutes(body.durationMinutes());
+
+        var slots = withReadLock(() -> service.findAvailableSlots(body.required(), optional, duration));
+        var result = slots.stream().map(SlotResponse::from).toList();
+        ctx.json(Map.of("slots", result));
+    }
+
+    private <T> T withReadLock(Supplier<T> action) {
+        dataLock.readLock().lock();
+        try {
+            return action.get();
+        } finally {
+            dataLock.readLock().unlock();
+        }
+    }
+
+    private void validateParticipantList(List<String> participants, String fieldName, boolean required) {
+        if (participants == null || participants.isEmpty()) {
+            if (required) {
+                throw new ValidationException("At least one " + fieldName.replace("participants", "participant") + " is required");
+            }
+            return;
+        }
+        if (participants.size() > MAX_PARTICIPANTS) {
+            throw new ValidationException("Too many " + fieldName + " (max " + MAX_PARTICIPANTS + ")");
+        }
+        if (participants.size() != Set.copyOf(participants).size()) {
+            throw new ValidationException("Duplicate " + fieldName + " not allowed");
+        }
+        participants.forEach(this::validateParticipantName);
+    }
+
+    private void validateParticipantName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new ValidationException("Participant name cannot be empty");
+        }
+        if (name.length() > Constants.MAX_NAME_LENGTH) {
+            throw new ValidationException("Participant name too long");
+        }
+        INVALID_CHARS.chars()
+                .filter(c -> name.indexOf(c) >= 0)
+                .findFirst()
+                .ifPresent(c -> {
+                    throw new ValidationException("Participant name contains invalid character: " + (char) c);
+                });
+    }
+
+    private void validateDuration(int durationMinutes) {
+        if (durationMinutes <= 0 || durationMinutes > MAX_DURATION_MINUTES) {
+            throw new ValidationException("Duration must be between 1 and " + MAX_DURATION_MINUTES + " minutes");
+        }
+    }
+
+    private void validateTotalParticipants(int total) {
+        if (total > MAX_PARTICIPANTS) {
+            throw new ValidationException("Too many participants (max " + MAX_PARTICIPANTS + ")");
+        }
+    }
+
+    private void validateNoOverlap(List<String> required, List<String> optional) {
+        if (!Collections.disjoint(required, optional)) {
+            throw new ValidationException("Participant cannot be both required and optional");
+        }
+    }
+
+    private void deleteTempFile(Path temp) {
+        if (temp != null) {
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    record AvailabilityRequest(List<String> participants, int durationMinutes) {}
+
+    record MeetingRequest(List<String> required, List<String> optional, int durationMinutes) {}
+
+    record SlotResponse(String start, String end, List<String> availableOptional, List<String> unavailableOptional) {
+        static SlotResponse from(AvailableSlot slot) {
+            return new SlotResponse(
+                    slot.timeSlot().start().toString(),
+                    slot.timeSlot().end().toString(),
+                    slot.availableOptionalParticipants(),
+                    slot.unavailableOptionalParticipants()
+            );
+        }
+    }
+
+    record BusySlotResponse(String start, String end) {
+        static BusySlotResponse from(TimeSlot slot) {
+            return new BusySlotResponse(slot.start().toString(), slot.end().toString());
+        }
+    }
+
+    record UploadResponse(List<String> participants, Map<String, List<BusySlotResponse>> busySlots) {}
+
+    private static class ValidationException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        ValidationException(String message) {
+            super(message);
+        }
     }
 }

@@ -1,31 +1,33 @@
-package io.slotify.core;
+package io.slotify.core.repository;
 
-import java.util.HashMap;
+import io.slotify.core.model.Schedule;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryScheduleRepository implements ScheduleRepository {
 
-    private final Map<String, Schedule> schedules = new HashMap<>();
+    private final Map<String, Schedule> data = new ConcurrentHashMap<>();
 
     @Override
     public void save(Schedule schedule) {
-        schedules.put(schedule.participantName(), schedule);
+        data.put(schedule.participantName(), schedule);
     }
 
     @Override
     public Optional<Schedule> findByParticipant(String name) {
-        return Optional.ofNullable(schedules.get(name));
+        return Optional.ofNullable(data.get(name));
     }
 
     @Override
     public Set<String> getAllParticipantNames() {
-        return schedules.keySet();
+        return Set.copyOf(data.keySet());
     }
 
     @Override
     public void clear() {
-        schedules.clear();
+        data.clear();
     }
 }
