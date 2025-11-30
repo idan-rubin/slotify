@@ -1,5 +1,6 @@
 # Build output
 target/
+dependency-reduced-pom.xml
 
 # IDE
 .idea/
@@ -8,9 +9,6 @@ target/
 
 # OS
 .DS_Store
-
-# Maven wrapper (optional - can include if preferred)
-!.mvn/wrapper/maven-wrapper.jar
 
 # Logs
 *.log
