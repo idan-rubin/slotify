@@ -455,7 +455,7 @@ Alice   ░░░░████████░░░░░░░░░░░░
 Jack    ░░░░████████████░░░░░░░░████░░░░░░░░████░░░░░░░░
 Bob     ░░░░██████████████████████████████████████░░░░░░
 
-Legend: ░ Free (light green)  █ Busy (red)  ▓ Available slot (green)
+░ Free    █ Busy
 ```
 
 ### Features

@@ -163,7 +163,9 @@ async function upload() {
     try {
         const res = await fetch('/api/upload', { method: 'POST', body: form });
 
-        if (!res.ok) {
+        // Validation errors return JSON, not SSE
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || contentType.includes('application/json')) {
             const err = await res.json();
             throw new Error(err.error || `Server error: ${res.status}`);
         }

@@ -154,7 +154,8 @@ public class WebApp {
 
         } catch (Exception e) {
             try {
-                sendSSE(ctx, "error", "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+                var errorJson = JSON_MAPPER.writeValueAsString(Map.of("error", e.getMessage() != null ? e.getMessage() : "Unknown error"));
+                sendSSE(ctx, "error", errorJson);
             } catch (IOException ignored) {}
         } finally {
             deleteTempFile(temp);
@@ -165,15 +166,6 @@ public class WebApp {
         ctx.res().getWriter().write("event: " + event + "\n");
         ctx.res().getWriter().write("data: " + data + "\n\n");
         ctx.res().getWriter().flush();
-    }
-
-    private String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 
     private void availability(Context ctx) {

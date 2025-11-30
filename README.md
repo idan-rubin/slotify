@@ -164,7 +164,7 @@ Upload a CSV calendar file to load participant schedules. The timeline immediate
 Alice   ░░░░████████░░░░░░░░░░░░████░░░░░░░░████░░░░░░░░
 Jack    ░░░░████████████░░░░░░░░████░░░░░░░░████░░░░░░░░
 
-░ Free (light green)  █ Busy (red)
+░ Free    █ Busy
 ```
 
 **Step 2: Query Meeting Slots**
@@ -173,16 +173,6 @@ Select participants, choose meeting duration (30/60/90/120 min), and optionally 
 
 **Step 3: Visualize Results**
 
-Available meeting slots are highlighted in green on the timeline:
-
-```
-        07  08  09  10  11  12  13  14  15  16  17  18  19
-Alice   ▓▓▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓
-Jack    ▓▓▓▓████████████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓
-
-▓ Available slot (green) - times where ALL selected participants are free
-```
-
-The slots are also listed as clickable chips: `07:00` `12:00` `15:00` `17:00`
+Available meeting slots are highlighted in green on the timeline and listed as clickable time chips.
 
 See [DESIGN.md](DESIGN.md) for architecture details.
