@@ -30,7 +30,20 @@ mvn clean install
 
 ### Run the CLI App
 
-The CLI app is an interactive tool that doesn't require Redis:
+#### Option 1: Docker
+
+```bash
+# Build the CLI image
+docker build -f Dockerfile.cli -t slotify-app .
+
+# Run with sample data
+docker run -it slotify-app
+
+# Run with your own CSV (mount as volume)
+docker run -it -v /path/to/your/calendar.csv:/data/calendar.csv slotify-app /data/calendar.csv
+```
+
+#### Option 2: Maven
 
 ```bash
 mvn -pl slotify-app exec:java -Dexec.args="slotify-app/src/main/resources/calendar.csv"

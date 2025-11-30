@@ -1,0 +1,15 @@
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /app
+COPY pom.xml .
+COPY slotify-core ./slotify-core
+COPY slotify-app ./slotify-app
+COPY slotify-web ./slotify-web
+RUN apt-get update && apt-get install -y maven && mvn -pl slotify-app -am package -DskipTests -q
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/slotify-app/target/slotify-app-1.0.0-SNAPSHOT.jar app.jar
+COPY --from=build /app/slotify-app/src/main/resources/calendar.csv /data/calendar.csv
+COPY --from=build /app/slotify-app/src/main/resources/blackout.csv /data/blackout.csv
+ENTRYPOINT ["java", "-jar", "app.jar"]
+CMD ["/data/calendar.csv"]
