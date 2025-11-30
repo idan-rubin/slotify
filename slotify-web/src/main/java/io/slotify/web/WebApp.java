@@ -34,7 +34,7 @@ import java.util.function.Supplier;
 public class WebApp {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    private static final int MAX_DURATION_MINUTES = 480; // 8 hours
+    private static final int MAX_DURATION_MINUTES = 120; // 2 hours
     private static final int MAX_PARTICIPANTS = 100;
     private static final int MIN_BUFFER_MINUTES = 5;
     private static final int MAX_BUFFER_MINUTES = 15;
