@@ -36,7 +36,8 @@ public class WebApp {
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final int MAX_DURATION_MINUTES = 480; // 8 hours
     private static final int MAX_PARTICIPANTS = 100;
-    private static final int MAX_BUFFER_MINUTES = 60;
+    private static final int MIN_BUFFER_MINUTES = 5;
+    private static final int MAX_BUFFER_MINUTES = 15;
     private static final int MAX_BLACKOUTS = 10;
     private static final String INVALID_CHARS = ":*[]{}\\\"'";
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON_MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -297,8 +298,8 @@ public class WebApp {
     }
 
     private void validateBuffer(int bufferMinutes) {
-        if (bufferMinutes < 0 || bufferMinutes > MAX_BUFFER_MINUTES) {
-            throw new ValidationException("Buffer must be between 0 and " + MAX_BUFFER_MINUTES + " minutes");
+        if (bufferMinutes != 0 && (bufferMinutes < MIN_BUFFER_MINUTES || bufferMinutes > MAX_BUFFER_MINUTES)) {
+            throw new ValidationException("Buffer must be 0 or between " + MIN_BUFFER_MINUTES + " and " + MAX_BUFFER_MINUTES + " minutes");
         }
     }
 
