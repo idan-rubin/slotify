@@ -40,6 +40,19 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// Buffer toggle
+let savedBuffer = 10;
+function toggleBuffer() {
+    const noBuffer = document.getElementById('no-buffer').checked;
+    const bufferInput = document.getElementById('buffer');
+    if (noBuffer) {
+        savedBuffer = bufferInput.value;
+        bufferInput.value = 0;
+    } else {
+        bufferInput.value = savedBuffer;
+    }
+}
+
 // Blackout management
 function addBlackout() {
     const start = document.getElementById('blackout-start').value;
@@ -271,7 +284,7 @@ async function findSlots() {
                 required,
                 optional,
                 durationMinutes: +document.getElementById('duration').value,
-                bufferMinutes: document.getElementById('no-buffer').checked ? 0 : +document.getElementById('buffer').value,
+                bufferMinutes: +document.getElementById('buffer').value,
                 blackouts
             })
         });

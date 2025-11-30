@@ -31,7 +31,7 @@
                 <label for="buffer">Buffer between meetings</label>
                 <div class="inline">
                     <input type="number" id="buffer" value="10" min="5" max="15" step="1" aria-label="Buffer time in minutes"> min
-                    <label class="checkbox-label"><input type="checkbox" id="no-buffer"> No buffer</label>
+                    <label class="checkbox-label"><input type="checkbox" id="no-buffer" onchange="toggleBuffer()"> No buffer</label>
                 </div>
             </div>
             <div>
