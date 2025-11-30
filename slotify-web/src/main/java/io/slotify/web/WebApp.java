@@ -291,9 +291,11 @@ public class WebApp {
                 });
     }
 
+    private static final int MIN_DURATION_MINUTES = 30;
+
     private void validateDuration(int durationMinutes) {
-        if (durationMinutes <= 0 || durationMinutes > MAX_DURATION_MINUTES) {
-            throw new ValidationException("Duration must be between 1 and " + MAX_DURATION_MINUTES + " minutes");
+        if (durationMinutes < MIN_DURATION_MINUTES || durationMinutes > MAX_DURATION_MINUTES) {
+            throw new ValidationException("Duration must be between " + MIN_DURATION_MINUTES + " and " + MAX_DURATION_MINUTES + " minutes");
         }
     }
 

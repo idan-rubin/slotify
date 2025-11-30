@@ -492,7 +492,7 @@ The web API includes comprehensive input validation to prevent abuse and ensure 
 | Line length | 2,000 chars | Maximum characters per line |
 | Participant name | 100 chars | Maximum name length |
 | Subject length | 500 chars | Maximum event subject length |
-| Duration | 1-120 min | Backend accepts 1-120, UI offers 30/60/90/120 |
+| Duration | 30-120 min | Backend and UI both enforce 30/60/90/120 options |
 | Buffer | 0 or 5-15 min | Buffer between meetings |
 | Required participants | 2+ | Minimum required participants |
 | Blackouts | 10 max | Maximum blocked time periods |
