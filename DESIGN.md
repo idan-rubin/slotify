@@ -127,8 +127,7 @@ PHASE 2 - QUERY TIME (lightweight):
 slotify/
 ├── pom.xml                         # Parent POM (aggregator)
 ├── docker-compose.yml              # Redis + web containers
-├── Dockerfile                      # Multi-stage build for web app
-├── Dockerfile.cli                  # Multi-stage build for CLI app
+├── Dockerfile                      # Multi-stage build (web + cli targets)
 ├── k8s/                            # Kubernetes manifests
 │
 ├── slotify-core/                   # DOMAIN & BUSINESS LOGIC MODULE
@@ -382,9 +381,9 @@ The design supports these future extensions without breaking changes:
 | App classes | 1 | App |
 | Web classes | 2 | WebApp, Config |
 | Test classes | 5 | TimeSlotTest, ScheduleTest, DefaultSchedulingServiceTest, CsvCalendarParserTest, SchedulingIntegrationTest |
-| Config files | 8 | 4 POMs + docker-compose.yml + Dockerfile + Dockerfile.cli + config.properties |
+| Config files | 7 | 4 POMs + docker-compose.yml + Dockerfile + config.properties |
 | K8s manifests | 3 | namespace.yaml, redis.yaml, slotify-web.yaml |
-| **Total** | **32** | |
+| **Total** | **31** | |
 
 ---
 
@@ -394,15 +393,15 @@ The project supports multiple deployment modes:
 
 | Mode | Command | Storage | Use Case |
 |------|---------|---------|----------|
-| **CLI (Docker)** | `docker run -it slotify-app` | In-memory | Quick testing, local use |
+| **CLI (Docker)** | `docker run -it slotify-cli` | In-memory | Quick testing, local use |
 | **Web (Docker Compose)** | `docker-compose up` | Redis | Local development |
 | **Web (Kubernetes)** | `kubectl apply -f k8s/` | Redis | Production deployment |
 
 ### CLI App (In-Memory)
 ```bash
 # Build and run CLI
-docker build -f Dockerfile.cli -t slotify-app .
-docker run -it slotify-app
+docker build --target cli -t slotify-cli .
+docker run -it slotify-cli
 ```
 The CLI app uses in-memory storage - no external dependencies required.
 
@@ -487,8 +486,9 @@ The web API includes comprehensive input validation to prevent abuse and ensure 
 | Line length | 2,000 chars | Maximum characters per line |
 | Participant name | 100 chars | Maximum name length |
 | Subject length | 500 chars | Maximum event subject length |
-| Duration | 1-480 min | Meeting duration range |
-| Buffer | 0-60 min | Buffer between meetings |
+| Duration | 30-120 min | Meeting duration (30/60/90/120 min) |
+| Buffer | 0 or 5-15 min | Buffer between meetings |
+| Required participants | 2+ | Minimum required participants |
 | Blackouts | 10 max | Maximum blocked time periods |
 | Participants | 100 max | Maximum participants per request |
 
