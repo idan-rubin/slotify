@@ -13,6 +13,8 @@ button { background: #2563eb; color: white; border: none; padding: 12px 24px; bo
 button:hover { background: #1d4ed8; }
 .btn-secondary { background: #10b981; }
 .btn-secondary:hover { background: #059669; }
+.btn-danger { background: #dc2626; }
+.btn-danger:hover { background: #b91c1c; }
 .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .participant-count { background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; }
 

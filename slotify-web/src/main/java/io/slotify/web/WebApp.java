@@ -80,10 +80,45 @@ public class WebApp {
                         ctx.status(400).json(Map.of("error", e.getMessage())))
                 .exception(Exception.class, (e, ctx) ->
                         ctx.status(500).json(Map.of("error", "Internal server error")))
+                .get("/api/state", app::getState)
+                .delete("/api/state", app::clearState)
                 .post("/api/upload", app::uploadWithSSE)
                 .post("/api/availability", app::availability)
                 .post("/api/meeting-request", app::meetingRequest)
                 .start(8080);
+    }
+
+    private void getState(Context ctx) {
+        dataLock.readLock().lock();
+        try {
+            var participants = repository.getAllParticipantNames().stream().sorted().toList();
+            if (participants.isEmpty()) {
+                ctx.json(Map.of("hasData", false));
+                return;
+            }
+            var busySlotsMap = participants.stream()
+                    .collect(Collectors.toMap(
+                            name -> name,
+                            name -> repository.findByParticipant(name)
+                                    .map(schedule -> schedule.busySlots().stream()
+                                            .map(BusySlotResponse::from)
+                                            .toList())
+                                    .orElse(List.of())
+                    ));
+            ctx.json(Map.of("hasData", true, "participants", participants, "busySlots", busySlotsMap));
+        } finally {
+            dataLock.readLock().unlock();
+        }
+    }
+
+    private void clearState(Context ctx) {
+        dataLock.writeLock().lock();
+        try {
+            repository.clear();
+            ctx.json(Map.of("success", true));
+        } finally {
+            dataLock.writeLock().unlock();
+        }
     }
 
     private void uploadWithSSE(Context ctx) {
@@ -224,9 +259,12 @@ public class WebApp {
     private void validateParticipantList(List<String> participants, String fieldName, boolean required) {
         if (participants == null || participants.isEmpty()) {
             if (required) {
-                throw new ValidationException("At least one " + fieldName.replace("participants", "participant") + " is required");
+                throw new ValidationException("At least 2 required participants are needed for a meeting");
             }
             return;
+        }
+        if (required && participants.size() < 2) {
+            throw new ValidationException("At least 2 required participants are needed for a meeting");
         }
         if (participants.size() > MAX_PARTICIPANTS) {
             throw new ValidationException("Too many " + fieldName + " (max " + MAX_PARTICIPANTS + ")");

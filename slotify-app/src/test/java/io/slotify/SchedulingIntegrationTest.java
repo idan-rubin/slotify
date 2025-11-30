@@ -68,6 +68,7 @@ class SchedulingIntegrationTest {
     void endToEnd_withBlackouts_excludesLunchHour() throws IOException {
         var csv = """
                 Alice,Morning meeting,8:00,9:00
+                Jack,Morning meeting,8:00,9:00
                 """;
         var blackouts = "12:00,13:00";
 
@@ -79,7 +80,7 @@ class SchedulingIntegrationTest {
         var blackoutSlots = parser.parseBlackouts(blackoutPath);
 
         var service = new DefaultSchedulingService(repository, blackoutSlots);
-        var slots = service.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slots = service.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
 
         var startTimes = slots.stream().map(TimeSlot::start).toList();
         assertThat(startTimes).doesNotContain(LocalTime.of(12, 0));
@@ -89,6 +90,7 @@ class SchedulingIntegrationTest {
     void endToEnd_withBufferTime_reducesAvailability() throws IOException {
         var csv = """
                 Alice,Meeting,10:00,11:00
+                Jack,Meeting,10:00,11:00
                 """;
         var path = createTempFile("calendar.csv", csv);
 
@@ -98,13 +100,13 @@ class SchedulingIntegrationTest {
         var serviceNoBuffer = new DefaultSchedulingService(repository);
 
         // Without buffer
-        var slotsNoBuffer = serviceNoBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slotsNoBuffer = serviceNoBuffer.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
         assertThat(slotsNoBuffer.stream().map(TimeSlot::start).toList())
                 .contains(LocalTime.of(9, 0));
 
-        // With 15 min buffer - 9:00 slot should be blocked
+        // With 10 min buffer - 9:00 slot should be blocked
         var serviceWithBuffer = new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(10));
-        var slotsWithBuffer = serviceWithBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slotsWithBuffer = serviceWithBuffer.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
         assertThat(slotsWithBuffer.stream().map(TimeSlot::start).toList())
                 .doesNotContain(LocalTime.of(9, 0));
     }
@@ -113,6 +115,7 @@ class SchedulingIntegrationTest {
     void endToEnd_withOptionalParticipants_showsAvailability() throws IOException {
         var csv = """
                 Alice,Meeting,8:00,9:00
+                Charlie,Meeting,8:00,9:00
                 Jack,Meeting,9:00,10:00
                 Bob,Meeting,9:00,12:00
                 """;
@@ -123,7 +126,7 @@ class SchedulingIntegrationTest {
 
         var service = new DefaultSchedulingService(repository);
         var slots = service.findAvailableSlots(
-                List.of("Alice"),
+                List.of("Alice", "Charlie"),
                 List.of("Jack", "Bob"),
                 Duration.ofMinutes(60));
 

@@ -72,18 +72,29 @@ class DefaultSchedulingServiceTest {
         repository.save(new Schedule("Alice", List.of(
                 new TimeSlot(LocalTime.of(7, 0), LocalTime.of(19, 0))
         )));
+        repository.save(new Schedule("Jack", List.of()));
 
-        var slots = service.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slots = service.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
 
         assertThat(slots).isEmpty();
     }
 
     @Test
     void findAvailableSlots_withUnknownParticipant_throwsException() {
-        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Unknown"), Duration.ofMinutes(60)))
+        repository.save(new Schedule("Alice", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice", "Unknown"), Duration.ofMinutes(60)))
                 .isInstanceOf(SchedulerException.class)
                 .extracting(e -> ((SchedulerException) e).getErrorType())
                 .isEqualTo(SchedulerException.ErrorType.PARTICIPANT_NOT_FOUND);
+    }
+
+    @Test
+    void findAvailableSlots_withSingleParticipant_throwsException() {
+        repository.save(new Schedule("Alice", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), Duration.ofMinutes(60)))
+                .isInstanceOf(SchedulerException.class)
+                .extracting(e -> ((SchedulerException) e).getErrorType())
+                .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
     }
 
     @Test
@@ -105,7 +116,8 @@ class DefaultSchedulingServiceTest {
     @Test
     void findAvailableSlots_withNullDuration_throwsException() {
         repository.save(new Schedule("Alice", List.of()));
-        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), null))
+        repository.save(new Schedule("Jack", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice", "Jack"), List.of(), null))
                 .isInstanceOf(SchedulerException.class)
                 .extracting(e -> ((SchedulerException) e).getErrorType())
                 .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
@@ -114,7 +126,8 @@ class DefaultSchedulingServiceTest {
     @Test
     void findAvailableSlots_withZeroDuration_throwsException() {
         repository.save(new Schedule("Alice", List.of()));
-        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), Duration.ZERO))
+        repository.save(new Schedule("Jack", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice", "Jack"), List.of(), Duration.ZERO))
                 .isInstanceOf(SchedulerException.class)
                 .extracting(e -> ((SchedulerException) e).getErrorType())
                 .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
@@ -123,7 +136,8 @@ class DefaultSchedulingServiceTest {
     @Test
     void findAvailableSlots_withNegativeDuration_throwsException() {
         repository.save(new Schedule("Alice", List.of()));
-        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice"), List.of(), Duration.ofMinutes(-30)))
+        repository.save(new Schedule("Jack", List.of()));
+        assertThatThrownBy(() -> service.findAvailableSlots(List.of("Alice", "Jack"), List.of(), Duration.ofMinutes(-30)))
                 .isInstanceOf(SchedulerException.class)
                 .extracting(e -> ((SchedulerException) e).getErrorType())
                 .isEqualTo(SchedulerException.ErrorType.INVALID_ARGUMENT);
@@ -145,16 +159,64 @@ class DefaultSchedulingServiceTest {
     }
 
     @Test
-    void findAvailableSlots_with30MinMeeting_findsMoreSlots() {
+    void findAvailableSlots_with30MinMeeting_returnsHalfHourlySlots() {
+        // Alice: busy 8:00-9:30, 13:00-14:00, 16:00-17:00
         repository.save(new Schedule("Alice", List.of(
-                new TimeSlot(LocalTime.of(8, 0), LocalTime.of(8, 40))
+                new TimeSlot(LocalTime.of(8, 0), LocalTime.of(9, 30)),
+                new TimeSlot(LocalTime.of(13, 0), LocalTime.of(14, 0)),
+                new TimeSlot(LocalTime.of(16, 0), LocalTime.of(17, 0))
+        )));
+        // Jack: same busy slots as Alice
+        repository.save(new Schedule("Jack", List.of(
+                new TimeSlot(LocalTime.of(8, 0), LocalTime.of(9, 30)),
+                new TimeSlot(LocalTime.of(13, 0), LocalTime.of(14, 0)),
+                new TimeSlot(LocalTime.of(16, 0), LocalTime.of(17, 0))
         )));
 
-        var slots = service.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(30));
+        var slots = service.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(30));
 
-        assertThat(slots).isNotEmpty();
-        var firstSlot = slots.getFirst();
-        assertThat(Duration.between(firstSlot.start(), firstSlot.end())).isEqualTo(Duration.ofMinutes(30));
+        // Should return half-hourly aligned 30-min slots where both are free
+        // After 9:30 busy ends, next slot is 9:30 (rounds up to next 30-min boundary)
+        var startTimes = slots.stream().map(TimeSlot::start).toList();
+        assertThat(startTimes).containsExactly(
+                LocalTime.of(7, 0),
+                LocalTime.of(7, 30),
+                LocalTime.of(9, 30),
+                LocalTime.of(10, 0),
+                LocalTime.of(10, 30),
+                LocalTime.of(11, 0),
+                LocalTime.of(11, 30),
+                LocalTime.of(12, 0),
+                LocalTime.of(12, 30),
+                LocalTime.of(14, 0),
+                LocalTime.of(14, 30),
+                LocalTime.of(15, 0),
+                LocalTime.of(15, 30),
+                LocalTime.of(17, 0),
+                LocalTime.of(17, 30),
+                LocalTime.of(18, 0),
+                LocalTime.of(18, 30)
+        );
+
+        // Verify each slot is exactly 30 minutes
+        slots.forEach(slot ->
+                assertThat(Duration.between(slot.start(), slot.end())).isEqualTo(Duration.ofMinutes(30))
+        );
+    }
+
+    @Test
+    void findAvailableSlots_with30MinMeeting_noMeetings_returnsAllHalfHourlySlots() {
+        repository.save(new Schedule("Alice", List.of()));
+        repository.save(new Schedule("Jack", List.of()));
+
+        var slots = service.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(30));
+
+        // Working hours: 7:00-19:00, so 24 half-hourly slots
+        assertThat(slots).hasSize(24);
+        var startTimes = slots.stream().map(TimeSlot::start).toList();
+        assertThat(startTimes.getFirst()).isEqualTo(LocalTime.of(7, 0));
+        assertThat(startTimes.get(1)).isEqualTo(LocalTime.of(7, 30));
+        assertThat(startTimes.getLast()).isEqualTo(LocalTime.of(18, 30));
     }
 
     @Test
@@ -162,11 +224,12 @@ class DefaultSchedulingServiceTest {
         repository.save(new Schedule("Alice", List.of(
                 new TimeSlot(LocalTime.of(10, 0), LocalTime.of(11, 0))
         )));
+        repository.save(new Schedule("Jack", List.of()));
 
         var serviceWithBuffer = new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(10));
-        var slots = serviceWithBuffer.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slots = serviceWithBuffer.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
 
-        // 9:00 slot should be blocked (would end at 10:00, needs 15 min buffer before 10:00 meeting)
+        // 9:00 slot should be blocked (would end at 10:00, needs buffer before 10:00 meeting)
         var startTimes = slots.stream().map(TimeSlot::start).toList();
         assertThat(startTimes).doesNotContain(LocalTime.of(9, 0));
     }
@@ -174,11 +237,12 @@ class DefaultSchedulingServiceTest {
     @Test
     void findAvailableSlots_withBlackout_excludesBlackoutPeriod() {
         repository.save(new Schedule("Alice", List.of()));
+        repository.save(new Schedule("Jack", List.of()));
 
         var blackouts = List.of(new TimeSlot(LocalTime.of(12, 0), LocalTime.of(13, 0)));
         var serviceWithBlackout = new DefaultSchedulingService(repository, blackouts);
 
-        var slots = serviceWithBlackout.findAvailableSlots(List.of("Alice"), Duration.ofMinutes(60));
+        var slots = serviceWithBlackout.findAvailableSlots(List.of("Alice", "Jack"), Duration.ofMinutes(60));
 
         var startTimes = slots.stream().map(TimeSlot::start).toList();
         assertThat(startTimes).doesNotContain(LocalTime.of(12, 0));
@@ -187,6 +251,7 @@ class DefaultSchedulingServiceTest {
     @Test
     void findAvailableSlots_withOptionalParticipants_returnsAvailabilityInfo() {
         repository.save(new Schedule("Alice", List.of()));
+        repository.save(new Schedule("Charlie", List.of()));
         repository.save(new Schedule("Jack", List.of(
                 new TimeSlot(LocalTime.of(9, 0), LocalTime.of(10, 0))
         )));
@@ -195,7 +260,7 @@ class DefaultSchedulingServiceTest {
         )));
 
         var slots = service.findAvailableSlots(
-                List.of("Alice"),
+                List.of("Alice", "Charlie"),
                 List.of("Jack", "Bob"),
                 Duration.ofMinutes(60));
 

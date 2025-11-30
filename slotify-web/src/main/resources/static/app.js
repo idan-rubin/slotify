@@ -3,6 +3,37 @@ let allParticipants = [];
 let blackouts = [];
 const START_HOUR = 7, END_HOUR = 19;
 
+// Load state on page load
+document.addEventListener('DOMContentLoaded', loadState);
+
+async function loadState() {
+    try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        if (data.hasData) {
+            handleUploadComplete(data);
+        }
+    } catch (e) {
+        console.error('Failed to load state:', e);
+    }
+}
+
+async function clearCache() {
+    if (!confirm('Clear all calendar data?')) return;
+    try {
+        await fetch('/api/state', { method: 'DELETE' });
+        busySlots = {};
+        allParticipants = [];
+        document.getElementById('timeline-card').style.display = 'none';
+        document.getElementById('settings-card').style.display = 'none';
+        document.getElementById('config').style.display = 'none';
+        document.getElementById('results').innerHTML = '';
+        document.getElementById('clear-btn').style.display = 'none';
+    } catch (e) {
+        alert('Failed to clear cache: ' + e.message);
+    }
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -216,6 +247,7 @@ function handleUploadComplete(data) {
     document.getElementById('timeline-card').style.display = 'block';
     document.getElementById('settings-card').style.display = 'block';
     document.getElementById('config').style.display = 'block';
+    document.getElementById('clear-btn').style.display = 'inline-block';
     document.getElementById('results').innerHTML = '';
     renderBlackouts();
     renderParticipantLists();
@@ -227,8 +259,8 @@ async function findSlots() {
     const required = [...document.querySelectorAll('#required-list input:checked')].map(c => c.value);
     const optional = [...document.querySelectorAll('#optional-list input:checked')].map(c => c.value);
 
-    if (required.length === 0) {
-        return alert('Select at least one required participant');
+    if (required.length < 2) {
+        return alert('Select at least 2 required participants');
     }
 
     try {

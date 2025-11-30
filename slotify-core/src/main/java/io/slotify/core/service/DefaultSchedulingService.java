@@ -52,15 +52,15 @@ public class DefaultSchedulingService implements SchedulingService {
 
     @Override
     public List<AvailableSlot> findAvailableSlots(List<String> requiredParticipants, List<String> optionalParticipants, Duration meetingDuration) {
-        if (requiredParticipants == null || requiredParticipants.isEmpty()) {
-            throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT, "At least one required participant is needed");
+        if (requiredParticipants == null || requiredParticipants.size() < 2) {
+            throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT, "At least 2 required participants are needed for a meeting");
         }
         if (meetingDuration == null || meetingDuration.isZero() || meetingDuration.isNegative()) {
             throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT, "Meeting duration must be positive");
         }
         var requiredBusy = collectBusySlots(requiredParticipants);
         var freeGaps = findGaps(requiredBusy);
-        var baseSlots = generateHourlySlots(freeGaps, meetingDuration);
+        var baseSlots = generateAlignedSlots(freeGaps, meetingDuration);
 
         var optionalSchedules = optionalParticipants.stream()
                 .map(name -> repository.findByParticipant(name).orElse(new Schedule(name, List.of())))
@@ -125,24 +125,30 @@ public class DefaultSchedulingService implements SchedulingService {
         return gaps;
     }
 
-    private List<TimeSlot> generateHourlySlots(List<TimeSlot> gaps, Duration meetingDuration) {
+    private List<TimeSlot> generateAlignedSlots(List<TimeSlot> gaps, Duration meetingDuration) {
         var slots = new ArrayList<TimeSlot>();
+        var slotIncrement = meetingDuration.toMinutes() <= 30 ? Duration.ofMinutes(30) : Duration.ofHours(1);
 
         for (var gap : gaps) {
-            var slotStart = roundUpToHour(gap.start());
+            var slotStart = roundUpToSlot(gap.start(), slotIncrement);
 
             while (!slotStart.plus(meetingDuration).isAfter(gap.end())) {
                 slots.add(new TimeSlot(slotStart, slotStart.plus(meetingDuration)));
-                slotStart = slotStart.plusHours(1);
+                slotStart = slotStart.plus(slotIncrement);
             }
         }
 
         return slots;
     }
 
-    private LocalTime roundUpToHour(LocalTime time) {
-        var truncated = time.truncatedTo(ChronoUnit.HOURS);
-        return truncated.equals(time) ? time : truncated.plusHours(1);
+    private LocalTime roundUpToSlot(LocalTime time, Duration slotSize) {
+        var slotMinutes = (int) slotSize.toMinutes();
+        var totalMinutes = time.getHour() * 60 + time.getMinute();
+        var remainder = totalMinutes % slotMinutes;
+        if (remainder == 0) {
+            return time;
+        }
+        return time.plusMinutes(slotMinutes - remainder);
     }
 
     private AvailableSlot buildAvailableSlot(TimeSlot slot, List<Schedule> optionalSchedules) {
