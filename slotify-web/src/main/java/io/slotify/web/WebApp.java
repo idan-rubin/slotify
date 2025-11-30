@@ -21,6 +21,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,8 @@ public class WebApp {
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final int MAX_DURATION_MINUTES = 480; // 8 hours
     private static final int MAX_PARTICIPANTS = 100;
+    private static final int MAX_BUFFER_MINUTES = 60;
+    private static final int MAX_BLACKOUTS = 10;
     private static final String INVALID_CHARS = ":*[]{}\\\"'";
 
     private final ScheduleRepository repository;
@@ -157,10 +160,24 @@ public class WebApp {
         validateNoOverlap(body.required(), optional);
 
         var duration = Duration.ofMinutes(body.durationMinutes());
+        validateBuffer(body.bufferMinutes());
+        validateBlackouts(body.blackouts());
+        var buffer = body.bufferMinutes() > 0 ? Duration.ofMinutes(body.bufferMinutes()) : null;
+        var blackouts = parseBlackouts(body.blackouts());
 
-        var slots = withReadLock(() -> service.findAvailableSlots(body.required(), optional, duration));
+        var requestService = new DefaultSchedulingService(repository, blackouts, buffer);
+        var slots = withReadLock(() -> requestService.findAvailableSlots(body.required(), optional, duration));
         var result = slots.stream().map(SlotResponse::from).toList();
         ctx.json(Map.of("slots", result));
+    }
+
+    private List<TimeSlot> parseBlackouts(List<BlackoutRequest> blackouts) {
+        if (blackouts == null || blackouts.isEmpty()) {
+            return List.of();
+        }
+        return blackouts.stream()
+                .map(b -> new TimeSlot(LocalTime.parse(b.start()), LocalTime.parse(b.end())))
+                .toList();
     }
 
     private <T> T withReadLock(Supplier<T> action) {
@@ -209,6 +226,29 @@ public class WebApp {
         }
     }
 
+    private void validateBuffer(int bufferMinutes) {
+        if (bufferMinutes < 0 || bufferMinutes > MAX_BUFFER_MINUTES) {
+            throw new ValidationException("Buffer must be between 0 and " + MAX_BUFFER_MINUTES + " minutes");
+        }
+    }
+
+    private void validateBlackouts(List<BlackoutRequest> blackouts) {
+        if (blackouts == null || blackouts.isEmpty()) {
+            return;
+        }
+        if (blackouts.size() > MAX_BLACKOUTS) {
+            throw new ValidationException("Too many blocked times (max " + MAX_BLACKOUTS + ")");
+        }
+        for (var b : blackouts) {
+            if (b.start() == null || b.end() == null) {
+                throw new ValidationException("Blocked time must have start and end");
+            }
+            if (b.start().compareTo(b.end()) >= 0) {
+                throw new ValidationException("Blocked time end must be after start");
+            }
+        }
+    }
+
     private void validateTotalParticipants(int total) {
         if (total > MAX_PARTICIPANTS) {
             throw new ValidationException("Too many participants (max " + MAX_PARTICIPANTS + ")");
@@ -232,7 +272,9 @@ public class WebApp {
 
     record AvailabilityRequest(List<String> participants, int durationMinutes) {}
 
-    record MeetingRequest(List<String> required, List<String> optional, int durationMinutes) {}
+    record MeetingRequest(List<String> required, List<String> optional, int durationMinutes, int bufferMinutes, List<BlackoutRequest> blackouts) {}
+
+    record BlackoutRequest(String start, String end) {}
 
     record SlotResponse(String start, String end, List<String> availableOptional, List<String> unavailableOptional) {
         static SlotResponse from(AvailableSlot slot) {

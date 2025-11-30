@@ -17,8 +17,6 @@ public class DefaultSchedulingService implements SchedulingService {
 
     private static final LocalTime WORK_START = LocalTime.of(7, 0);
     private static final LocalTime WORK_END = LocalTime.of(19, 0);
-    private static final int MIN_BUFFER_MINUTES = 5;
-    private static final int MAX_BUFFER_MINUTES = 15;
 
     private final ScheduleRepository repository;
     private final List<TimeSlot> blackoutPeriods;
@@ -28,12 +26,8 @@ public class DefaultSchedulingService implements SchedulingService {
         if (repository == null) {
             throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT, "repository cannot be null");
         }
-        if (bufferBetweenMeetings != null) {
-            var minutes = bufferBetweenMeetings.toMinutes();
-            if (minutes < MIN_BUFFER_MINUTES || minutes > MAX_BUFFER_MINUTES) {
-                throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT,
-                        "Buffer must be between %d and %d minutes".formatted(MIN_BUFFER_MINUTES, MAX_BUFFER_MINUTES));
-            }
+        if (bufferBetweenMeetings != null && bufferBetweenMeetings.isNegative()) {
+            throw new SchedulerException(SchedulerException.ErrorType.INVALID_ARGUMENT, "Buffer cannot be negative");
         }
         this.repository = repository;
         this.blackoutPeriods = blackoutPeriods != null ? List.copyOf(blackoutPeriods) : List.of();
@@ -79,7 +73,6 @@ public class DefaultSchedulingService implements SchedulingService {
 
     private List<TimeSlot> collectBusySlots(List<String> participants) {
         var allBusySlots = new ArrayList<TimeSlot>();
-        var applyBuffer = hasBuffer();
 
         for (var name : participants) {
             var schedule = repository.findByParticipant(name)
@@ -87,18 +80,18 @@ public class DefaultSchedulingService implements SchedulingService {
                             SchedulerException.ErrorType.PARTICIPANT_NOT_FOUND,
                             "Participant not found: " + name));
 
-            if (applyBuffer) {
-                schedule.busySlots().stream()
-                        .map(slot -> slot.expandBy(bufferBetweenMeetings))
-                        .forEach(allBusySlots::add);
-            } else {
-                allBusySlots.addAll(schedule.busySlots());
-            }
+            schedule.busySlots().stream()
+                    .map(this::applyBuffer)
+                    .forEach(allBusySlots::add);
         }
 
         allBusySlots.addAll(blackoutPeriods);
 
         return TimeSlot.mergeOverlapping(allBusySlots);
+    }
+
+    private TimeSlot applyBuffer(TimeSlot slot) {
+        return hasBuffer() ? slot.expandBy(bufferBetweenMeetings) : slot;
     }
 
     private boolean hasBuffer() {
@@ -153,9 +146,7 @@ public class DefaultSchedulingService implements SchedulingService {
     }
 
     private AvailableSlot buildAvailableSlot(TimeSlot slot, List<Schedule> optionalSchedules) {
-        var effectiveSlot = hasBuffer()
-                ? slot.expandBy(bufferBetweenMeetings)
-                : slot;
+        var effectiveSlot = applyBuffer(slot);
 
         var partitioned = optionalSchedules.stream()
                 .collect(Collectors.partitioningBy(

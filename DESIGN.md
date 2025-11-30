@@ -42,11 +42,12 @@ A calendar scheduling system that finds available meeting slots for multiple par
 ### My Guidelines
 
 1. Multi-module Maven layout: core, app, web
-2. Modern, clean code (Java 17+ features, no boilerplate)
-3. Proper interfaces (program to interfaces, not implementations)
-4. Redis for web app storage (in-memory for CLI)
-5. No useless comments (self-documenting code)
-6. Pre-processing moved to input ingestion to simplify the scheduling API
+2. Package structure: `io.slotify.core.*` for core, `io.slotify.*` for apps
+3. Modern, clean code (Java 17+ features, no boilerplate)
+4. Proper interfaces (program to interfaces, not implementations)
+5. Redis for web app storage (in-memory for CLI)
+6. No useless comments (self-documenting code)
+7. Pre-processing moved to input ingestion to simplify the scheduling API
 
 ### Where AI Assisted
 
@@ -126,6 +127,7 @@ slotify/
 ├── pom.xml                         # Parent POM (aggregator)
 ├── docker-compose.yml              # Redis + web containers
 ├── Dockerfile                      # Multi-stage build for web app
+├── Dockerfile.cli                  # Multi-stage build for CLI app
 ├── k8s/                            # Kubernetes manifests
 │
 ├── slotify-core/                   # DOMAIN & BUSINESS LOGIC MODULE
@@ -223,7 +225,7 @@ Blackouts (like lunch) are typically organization-wide policies, not per-query d
 ### 5.4 Why External Configuration via Config Class?
 
 ```properties
-# config.properties
+# config.properties (example values)
 redis.host=localhost
 redis.port=6379
 buffer.minutes=15
@@ -378,14 +380,52 @@ The design supports these future extensions without breaking changes:
 | Core exception | 1 | SchedulerException |
 | App classes | 1 | App |
 | Web classes | 2 | WebApp, Config |
-| Test classes | 4 | TimeSlotTest, ScheduleTest, DefaultSchedulingServiceTest, SchedulingIntegrationTest |
-| Config files | 7 | 4 POMs + docker-compose.yml + Dockerfile + config.properties |
+| Test classes | 5 | TimeSlotTest, ScheduleTest, DefaultSchedulingServiceTest, CsvCalendarParserTest, SchedulingIntegrationTest |
+| Config files | 8 | 4 POMs + docker-compose.yml + Dockerfile + Dockerfile.cli + config.properties |
 | K8s manifests | 3 | namespace.yaml, redis.yaml, slotify-web.yaml |
-| **Total** | **30** | |
+| **Total** | **32** | |
 
 ---
 
-## 10. Tech Stack
+## 10. Deployment Options
+
+The project supports multiple deployment modes:
+
+| Mode | Command | Storage | Use Case |
+|------|---------|---------|----------|
+| **CLI (Docker)** | `docker run -it slotify-app` | In-memory | Quick testing, local use |
+| **Web (Docker Compose)** | `docker-compose up` | Redis | Local development |
+| **Web (Kubernetes)** | `kubectl apply -f k8s/` | Redis | Production deployment |
+
+### CLI App (In-Memory)
+```bash
+# Build and run CLI
+docker build -f Dockerfile.cli -t slotify-app .
+docker run -it slotify-app
+```
+The CLI app uses in-memory storage - no external dependencies required.
+
+### Web App (Docker Compose)
+```bash
+docker-compose up --build
+# Access at http://localhost:8080
+```
+Docker Compose orchestrates both the web app and Redis container.
+
+### Web App (Kubernetes)
+```bash
+# Deploy to cluster
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/redis.yaml
+kubectl apply -f k8s/slotify-web.yaml
+```
+Kubernetes deployment includes Redis, health probes, and LoadBalancer service.
+
+**Live Demo:** http://20.161.224.152 (Azure AKS)
+
+---
+
+## 11. Tech Stack
 
 | Component | Technology | Version |
 |-----------|------------|---------|
@@ -402,7 +442,7 @@ The design supports these future extensions without breaking changes:
 
 ---
 
-## 11. Web UI
+## 12. Web UI
 
 ### Timeline Visualization
 

@@ -22,6 +22,7 @@ public class CsvCalendarParser implements CalendarParser {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("H:mm");
     private static final int MAX_LINE_LENGTH = 2000;
     private static final int MAX_LINES = 10000;
+    private static final int MAX_SUBJECT_LENGTH = 500;
 
     @Override
     public Map<String, Schedule> parseAndBuildSchedules(Path csvPath) {
@@ -109,8 +110,6 @@ public class CsvCalendarParser implements CalendarParser {
         fields.add(current.toString());
         return fields;
     }
-
-    private static final int MAX_SUBJECT_LENGTH = 500;
 
     private CalendarEvent parseEventLine(String[] parts, int lineNumber) {
         var participant = parts[0].trim();

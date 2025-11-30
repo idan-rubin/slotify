@@ -130,10 +130,10 @@ class DefaultSchedulingServiceTest {
     }
 
     @Test
-    void constructor_withInvalidBuffer_throwsException() {
-        assertThatThrownBy(() -> new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(3)))
+    void constructor_withNegativeBuffer_throwsException() {
+        assertThatThrownBy(() -> new DefaultSchedulingService(repository, List.of(), Duration.ofMinutes(-5)))
                 .isInstanceOf(SchedulerException.class)
-                .hasMessageContaining("between 5 and 15");
+                .hasMessageContaining("negative");
     }
 
     @Test

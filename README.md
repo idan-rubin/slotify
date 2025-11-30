@@ -40,7 +40,7 @@ docker build -f Dockerfile.cli -t slotify-app .
 docker run -it slotify-app
 
 # Run interactively (prompts for file path)
-docker run -it slotify-app --
+docker run -it --entrypoint java slotify-app -jar app.jar
 ```
 
 #### Option 2: Maven
@@ -109,6 +109,8 @@ kubectl get pods -n slotify
 # Get external IP
 kubectl get svc slotify-web -n slotify
 ```
+
+**Live Demo:** http://20.161.224.152 (Azure AKS)
 
 ## CSV Format
 
